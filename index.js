@@ -47,7 +47,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
-  '.cgroup', '.pp', '.add',
+  '.cgroup', '.pp', '.gpp', '.add',
 ]);
 
 const app = express();
@@ -183,6 +183,19 @@ async function bufferFromImageMessage(imageMessage) {
   return Buffer.concat(chunks);
 }
 
+function imageMessageFromMsg(msg) {
+  const nested = (node) =>
+    node?.imageMessage ||
+    node?.viewOnceMessage?.message?.imageMessage ||
+    node?.viewOnceMessageV2?.message?.imageMessage ||
+    node?.viewOnceMessageV2Extension?.message?.imageMessage ||
+    null;
+  const direct = nested(msg.message);
+  if (direct) return direct;
+  const quoted = contextInfo(msg)?.quotedMessage;
+  return nested(quoted);
+}
+
 function botJid() {
   if (!sock?.user?.id) return '';
   return jidNormalizedUser(sock.user.id);
@@ -203,6 +216,7 @@ function menuText() {
     '',
     '`.cgroup Nom du groupe` — créer le groupe',
     '`.pp` — répondre à une photo (ou légende) pour la photo de profil du *bot*',
+    '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.stats` — restants / déjà utilisés',
     '`.ping` — test',
@@ -429,13 +443,7 @@ async function handleCgroup(msg, text, adminPhone) {
 
 async function handlePp(msg) {
   const chat = msg.key.remoteJid;
-  let imageMessage = msg.message?.imageMessage || null;
-  const ctx = contextInfo(msg);
-  const quoted = ctx?.quotedMessage;
-  if (!imageMessage && quoted?.imageMessage) imageMessage = quoted.imageMessage;
-  if (!imageMessage && quoted?.viewOnceMessage?.message?.imageMessage) {
-    imageMessage = quoted.viewOnceMessage.message.imageMessage;
-  }
+  const imageMessage = imageMessageFromMsg(msg);
   if (!imageMessage) {
     await sock.sendMessage(chat, {
       text: '❌ Réponds à une *photo* avec `.pp`, ou envoie la photo avec `.pp` en légende.',
@@ -448,6 +456,29 @@ async function handlePp(msg) {
   if (!me) throw new Error('Bot non connecté');
   await sock.updateProfilePicture(me, buffer);
   await sock.sendMessage(chat, { text: '✅ Photo de profil du bot mise à jour.' });
+}
+
+async function handleGpp(msg, adminPhone) {
+  const chat = msg.key.remoteJid;
+  const groupId = resolveTargetGroup(msg, adminPhone);
+  if (!groupId || !isGroupJid(groupId)) {
+    await sock.sendMessage(chat, {
+      text: '❌ `.gpp` s’utilise *dans le groupe* (réponds à une photo, ou envoie la photo avec `.gpp` en légende).',
+    });
+    return;
+  }
+  const imageMessage = imageMessageFromMsg(msg);
+  if (!imageMessage) {
+    await sock.sendMessage(chat, {
+      text: '❌ Réponds à une *photo* avec `.gpp`, ou envoie la photo avec `.gpp` en légende.',
+    });
+    return;
+  }
+  const buffer = await bufferFromImageMessage(imageMessage);
+  if (!buffer.length) throw new Error('Image vide');
+  await sock.updateProfilePicture(groupId, buffer);
+  const subject = (await groupSubject(groupId)) || 'groupe';
+  await sock.sendMessage(chat, { text: `✅ Photo du groupe *${subject}* mise à jour.` });
 }
 
 async function handleAdd(msg, text, adminPhone) {
@@ -646,6 +677,11 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.pp') {
         await handlePp(msg);
+        continue;
+      }
+
+      if (cmd === '.gpp') {
+        await handleGpp(msg, adminPhone);
         continue;
       }
 
