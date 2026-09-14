@@ -32,7 +32,8 @@ const { markPhone, rememberGroup, stats: usedStats } = require('./lib/used');
 const { pickUnused, poolStats, displayName, reloadProdCache } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 
-const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21920', 10) || 21920;
+const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
+const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
 const AUTH_DIR = process.env.WA_AUTH_DIR
   ? path.resolve(process.env.WA_AUTH_DIR)
   : path.join(__dirname, 'auth_info_baileys');
@@ -745,21 +746,10 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
   }
 }
 
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.get('/', (_req, res) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  const img = currentQrBase64
-    ? `<img src="${currentQrBase64}" alt="QR" style="width:280px;height:280px">`
-    : '<p>Pas de QR. Session déjà liée ou connexion en cours.</p>';
-  res.end(`<!doctype html><meta charset="utf-8"><title>Bot groupes</title>
-  <body style="font-family:sans-serif;max-width:480px;margin:40px auto">
-  <h1>Bot groupes WhatsApp</h1>
-  <p>Statut : <b>${isConnected ? 'connecté' : isLinking ? 'connexion…' : 'déconnecté'}</b></p>
-  <p>.add = <b>${modeLabel()}</b></p>
-  ${pairingCode ? `<p>Code : <b>${pairingCode}</b></p>` : ''}
-  ${qrError ? `<p style="color:#c00">${qrError}</p>` : ''}
-  ${img}
-  <p><a href="/api/status">/api/status</a></p>
-  </body>`);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/api/status', (_req, res) => {
@@ -810,6 +800,7 @@ app.post('/api/logout', async (_req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[BOT] QR : http://${PUBLIC_HOST}:${PORT}`);
   console.log(`[BOT] http://localhost:${PORT}`);
   console.log(`[BOT] .add mode=${modeLabel()}`);
   try {

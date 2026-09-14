@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bot groupes — scanner le QR</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Segoe UI, system-ui, sans-serif;
+      background: #0b1020;
+      color: #f4f6fb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    main {
+      width: min(440px, 100%);
+      background: #151b32;
+      border: 1px solid #2a3358;
+      border-radius: 18px;
+      padding: 28px 24px 24px;
+      text-align: center;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.35rem; }
+    .url { color: #9aa6c8; font-size: 13px; word-break: break-all; margin: 0 0 18px; }
+    .status { font-weight: 700; margin: 0 0 16px; }
+    .ok { color: #4ade80; }
+    .wait { color: #fbbf24; }
+    .off { color: #f87171; }
+    .qr-box {
+      min-height: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      border-radius: 12px;
+      margin: 0 auto 16px;
+      width: 280px;
+      height: 280px;
+    }
+    .qr-box img { width: 260px; height: 260px; }
+    .hint { color: #c5cde6; font-size: 14px; line-height: 1.45; margin: 0 0 16px; text-align: left; }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 10px;
+      background: #e8001c;
+      color: #fff;
+      font-weight: 700;
+      padding: 12px 16px;
+      cursor: pointer;
+      width: 100%;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    .code { margin: 0 0 12px; font-size: 22px; letter-spacing: .08em; }
+    .err { color: #fca5a5; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Scanner le QR WhatsApp</h1>
+    <p class="url">http://prem-eu2.bot-hosting.net:21774</p>
+    <p class="status wait" id="status">Connexion…</p>
+    <p class="code" id="pairing" hidden></p>
+    <div class="qr-box" id="qrBox"><span style="color:#333">En attente du QR…</span></div>
+    <p class="hint">
+      WhatsApp → Paramètres → Appareils connectés → Lier un appareil.<br>
+      Le QR se rafraîchit tout seul. La session reste sur ce serveur après le scan.
+    </p>
+    <p class="err" id="error"></p>
+    <button type="button" id="refresh">Relancer le QR</button>
+  </main>
+  <script>
+    const statusEl = document.getElementById('status');
+    const qrBox = document.getElementById('qrBox');
+    const pairingEl = document.getElementById('pairing');
+    const errorEl = document.getElementById('error');
+    const refreshBtn = document.getElementById('refresh');
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = 'status ' + kind;
+    }
+
+    async function loadStatus() {
+      const res = await fetch('/api/status', { cache: 'no-store' });
+      const data = await res.json();
+      errorEl.textContent = data.qrError || '';
+      if (data.connected) {
+        setStatus('Connecté — session OK', 'ok');
+        qrBox.innerHTML = '<span style="color:#111;font-weight:700">WhatsApp lié</span>';
+        pairingEl.hidden = true;
+        return;
+      }
+      if (data.pairingCode) {
+        pairingEl.hidden = false;
+        pairingEl.textContent = data.pairingCode;
+      } else {
+        pairingEl.hidden = true;
+      }
+      if (data.qr) {
+        setStatus('Scanne ce QR', 'wait');
+        qrBox.innerHTML = '<img alt="QR WhatsApp" src="' + data.qr + '">';
+        return;
+      }
+      setStatus(data.connecting ? 'QR en cours…' : 'Déconnecté', data.connecting ? 'wait' : 'off');
+      qrBox.innerHTML = '<span style="color:#333">Pas de QR pour l’instant</span>';
+    }
+
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Nouveau QR…';
+      try {
+        await fetch('/api/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method: 'qr' }),
+        });
+        await loadStatus();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Impossible de relancer';
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Relancer le QR';
+      }
+    });
+
+    loadStatus().catch((err) => {
+      setStatus('Serveur injoignable', 'off');
+      errorEl.textContent = err.message || '';
+    });
+    setInterval(() => {
+      loadStatus().catch(() => {});
+    }, 2000);
+  </script>
+</body>
+</html>
