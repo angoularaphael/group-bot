@@ -290,6 +290,57 @@ function statusFromAddResult(result, jid) {
   return 200;
 }
 
+function isReachoutError(err) {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const data = err?.data;
+  return (
+    msg.includes('reachout') ||
+    msg.includes('account_reachout_restricted') ||
+    data === 463 ||
+    data === '463'
+  );
+}
+
+async function reachoutSuffix() {
+  try {
+    const t = await sock.fetchAccountReachoutTimelock();
+    if (t?.isActive && t.timeEnforcementEnds) {
+      return `\n⏳ Restriction WhatsApp jusqu’à ${t.timeEnforcementEnds.toLocaleString('fr-FR')}.`;
+    }
+  } catch (e) {
+    console.warn('[BOT] reachout timelock:', e.message);
+  }
+  return '';
+}
+
+/** JID réel du message (déjà en conversation) — jamais un numéro « fallback ». */
+function senderJidForGroup(msg, adminPhone) {
+  const mePhone = botPhone();
+  if (adminPhone && adminPhone === mePhone) return '';
+  const key = msg.key || {};
+  const candidates = [key.remoteJid, key.remoteJidAlt, key.participant, key.participantAlt, key.senderPn];
+  for (const jid of candidates) {
+    if (!jid || isGroupJid(jid)) continue;
+    if (isLidJid(jid)) return jid;
+    if (isPnJid(jid) && normalizePhone(jid) !== mePhone) {
+      return jidNormalizedUser(jid);
+    }
+  }
+  if (adminPhone && adminPhone !== mePhone) return phoneToJid(adminPhone);
+  return '';
+}
+
+async function createGroupSafe(name, extraParticipantJid) {
+  try {
+    return await sock.groupCreate(name, []);
+  } catch (e) {
+    console.warn('[BOT] groupCreate []:', e.message);
+    if (isReachoutError(e) || !extraParticipantJid) throw e;
+    console.log('[BOT] retry groupCreate with', extraParticipantJid);
+    return await sock.groupCreate(name, [extraParticipantJid]);
+  }
+}
+
 async function addParticipantsBatched(groupId, jids) {
   const ok = [];
   const fail = [];
@@ -304,7 +355,9 @@ async function addParticipantsBatched(groupId, jids) {
       }
     } catch (e) {
       console.warn('[BOT] add batch:', e.message);
-      for (const jid of batch) fail.push({ jid, code: 500, error: e.message });
+      const code = isReachoutError(e) ? 463 : 500;
+      for (const jid of batch) fail.push({ jid, code, error: e.message });
+      if (isReachoutError(e)) break;
     }
     if (i + ADD_BATCH < jids.length) await sleep(ADD_DELAY_MS);
   }
@@ -318,20 +371,32 @@ async function handleCgroup(msg, text, adminPhone) {
     await sock.sendMessage(chat, { text: '❌ Format : `.cgroup Nom du groupe`' });
     return;
   }
-  const participants = [];
-  const me = botPhone();
-  if (adminPhone && adminPhone !== me) participants.push(phoneToJid(adminPhone));
-  if (!participants.length) {
-    const fallback = getAllAuthorizedPhones().find((p) => p !== me);
-    if (fallback) participants.push(phoneToJid(fallback));
+
+  const extra = senderJidForGroup(msg, adminPhone);
+  console.log(`[BOT] .cgroup me=${botPhone()} extra=${extra || '(aucun — groupe vide)'}`);
+
+  let created;
+  try {
+    created = await createGroupSafe(name, extra);
+  } catch (e) {
+    if (isReachoutError(e)) {
+      const hint = await reachoutSuffix();
+      await sock.sendMessage(chat, {
+        text: [
+          '❌ WhatsApp refuse d’ajouter un *nouveau* numéro à la création (restriction « reach out »).',
+          'Sur le téléphone tu peux créer un groupe avec tes contacts — l’API, elle, n’a pas le droit d’inviter un inconnu.',
+          '',
+          '*Deux options :*',
+          `1. Crée *${name}* à la main sur le téléphone, ouvre-le, tape \`.add 3\` dedans.`,
+          '2. Attends que la restriction se lève, puis réessaie `.cgroup` (le bot crée maintenant un groupe *sans* autre membre).',
+          hint,
+        ].join('\n'),
+      });
+      return;
+    }
+    throw e;
   }
-  if (!participants.length) {
-    await sock.sendMessage(chat, {
-      text: '❌ WhatsApp exige au moins 1 membre en plus du bot pour créer un groupe.',
-    });
-    return;
-  }
-  const created = await sock.groupCreate(name, participants);
+
   const gid = created?.id || created?.gid;
   if (!gid) throw new Error('Groupe créé sans id');
   rememberLastGroup(adminPhone, gid);
@@ -488,7 +553,22 @@ async function handleAdd(msg, text, adminPhone) {
     if (addedContacts.length > 15) lines.push(`… +${addedContacts.length - 15} autres`);
   }
   if (notWa.length) lines.push('', `⚠️ ${notWa.length} numéro(s) pas sur WhatsApp (marqués, ignorés ensuite).`);
-  if (failed.length) lines.push(`⚠️ ${failed.length} refus(s) WhatsApp (confidentialité / limite) — *non marqués*.`);
+  if (failed.some((f) => f.code === 463)) {
+    let invite = '';
+    try {
+      const code = await sock.groupInviteCode(groupId);
+      if (code) invite = `https://chat.whatsapp.com/${code}`;
+    } catch (e) {
+      /* ignore */
+    }
+    lines.push(
+      '',
+      '❌ WhatsApp bloque l’ajout *direct* de nouveaux numéros (même restriction que `.cgroup`).',
+      invite ? `Envoie ce lien : ${invite}` : 'Partage le lien d’invitation du groupe.'
+    );
+  } else if (failed.length) {
+    lines.push(`⚠️ ${failed.length} refus(s) WhatsApp (confidentialité / limite) — *non marqués*.`);
+  }
   if (leftover > 0) {
     const left = poolStats().available;
     lines.push('', `ℹ️ ${leftover} manquant(s) — ${left} encore dispo dans la base.`);
