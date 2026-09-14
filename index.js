@@ -217,7 +217,7 @@ function menuText() {
     '`.cgroup Nom du groupe` — créer le groupe',
     '`.pp` — répondre à une photo (ou légende) pour la photo de profil du *bot*',
     '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
-    '`.mname Nouveau nom` — changer le nom du *bot*',
+    '`.mname Nouveau nom` — changer le nom du *groupe*',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.stats` — restants / déjà utilisés',
     '`.ping` — test',
@@ -482,19 +482,32 @@ async function handleGpp(msg, adminPhone) {
   await sock.sendMessage(chat, { text: `✅ Photo du groupe *${subject}* mise à jour.` });
 }
 
-async function handleMname(msg, text) {
+async function handleMname(msg, text, adminPhone) {
   const chat = msg.key.remoteJid;
   const name = String(text || '').replace(/^\.mname\s+/i, '').trim();
   if (!name) {
-    await sock.sendMessage(chat, { text: '❌ Format : `.mname Nouveau nom`' });
+    await sock.sendMessage(chat, { text: '❌ Format : `.mname Nouveau nom`\nÀ envoyer *dans le groupe*.' });
     return;
   }
-  if ([...name].length > 25) {
-    await sock.sendMessage(chat, { text: '❌ WhatsApp limite le nom à 25 caractères.' });
+  if ([...name].length > 100) {
+    await sock.sendMessage(chat, { text: '❌ WhatsApp limite le nom du groupe à 100 caractères.' });
     return;
   }
-  await sock.updateProfileName(name);
-  await sock.sendMessage(chat, { text: `✅ Nom du bot : *${name}*` });
+  const groupId = resolveTargetGroup(msg, adminPhone);
+  if (!groupId || !isGroupJid(groupId)) {
+    await sock.sendMessage(chat, {
+      text: '❌ `.mname` s’utilise *dans le groupe*.',
+    });
+    return;
+  }
+  const previous = (await groupSubject(groupId)) || '';
+  await sock.groupUpdateSubject(groupId, name);
+  rememberGroup(groupId, { name });
+  await sock.sendMessage(chat, {
+    text: previous && previous !== name
+      ? `✅ Groupe renommé : *${previous}* → *${name}*`
+      : `✅ Nom du groupe : *${name}*`,
+  });
 }
 
 async function handleAdd(msg, text, adminPhone) {
@@ -702,7 +715,7 @@ async function handleIncomingMessages(m) {
       }
 
       if (cmd === '.mname') {
-        await handleMname(msg, clean);
+        await handleMname(msg, clean, adminPhone);
         continue;
       }
 
