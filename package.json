@@ -1,0 +1,22 @@
+{
+  "name": "bot-groupes-wa",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp — création de groupes et ajout depuis bd triee",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "start:bootstrap": "node bootstrap.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
+  }
+}

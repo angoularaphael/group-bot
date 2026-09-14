@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+auth_info_baileys/
+bot_config.json
+data/used.json
+data/mode.json
+data/groups.json
+data/bot_config.json
+data/auth_info_baileys/
+data/bd-triee/
+*.log
