@@ -47,7 +47,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
-  '.cgroup', '.pp', '.gpp', '.add',
+  '.cgroup', '.pp', '.gpp', '.mname', '.add',
 ]);
 
 const app = express();
@@ -217,6 +217,7 @@ function menuText() {
     '`.cgroup Nom du groupe` — créer le groupe',
     '`.pp` — répondre à une photo (ou légende) pour la photo de profil du *bot*',
     '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
+    '`.mname Nouveau nom` — changer le nom du *bot*',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.stats` — restants / déjà utilisés',
     '`.ping` — test',
@@ -481,6 +482,21 @@ async function handleGpp(msg, adminPhone) {
   await sock.sendMessage(chat, { text: `✅ Photo du groupe *${subject}* mise à jour.` });
 }
 
+async function handleMname(msg, text) {
+  const chat = msg.key.remoteJid;
+  const name = String(text || '').replace(/^\.mname\s+/i, '').trim();
+  if (!name) {
+    await sock.sendMessage(chat, { text: '❌ Format : `.mname Nouveau nom`' });
+    return;
+  }
+  if ([...name].length > 25) {
+    await sock.sendMessage(chat, { text: '❌ WhatsApp limite le nom à 25 caractères.' });
+    return;
+  }
+  await sock.updateProfileName(name);
+  await sock.sendMessage(chat, { text: `✅ Nom du bot : *${name}*` });
+}
+
 async function handleAdd(msg, text, adminPhone) {
   const chat = msg.key.remoteJid;
   const n = parseAddCount(text);
@@ -682,6 +698,11 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.gpp') {
         await handleGpp(msg, adminPhone);
+        continue;
+      }
+
+      if (cmd === '.mname') {
+        await handleMname(msg, clean);
         continue;
       }
 
