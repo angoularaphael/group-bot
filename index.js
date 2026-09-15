@@ -29,7 +29,7 @@ const {
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
+const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -57,11 +57,13 @@ const CONFIG_FILE = process.env.BOT_CONFIG_FILE
 const MANDATORY_ADMIN_PHONE = normalizePhone(process.env.MANDATORY_ADMIN_PHONE || '33762641473');
 const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
 const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
+const SENDTEST_TEXT = String(process.env.SENDTEST_TEXT || '👋 Test bot — message privé (pas de groupe).').trim();
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
+  '.savecon', '.sendtest',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -297,6 +299,8 @@ function menuText() {
     '`.mute` — seuls les *admins* peuvent écrire',
     '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
+    '`.savecon` — enregistrer les numéros test dans les contacts WhatsApp (`test1`…)',
+    '`.sendtest` — leur envoyer un message *privé* un par un (pas de groupe)',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
@@ -1216,6 +1220,158 @@ async function handleAdd(msg, text, adminPhone) {
   await sendSafe(chat, { text: lines.filter(Boolean).join('\n') });
 }
 
+function quotedPlainText(msg) {
+  const q = contextInfo(msg)?.quotedMessage;
+  if (!q) return '';
+  return String(
+    q.conversation ||
+      q.extendedTextMessage?.text ||
+      q.imageMessage?.caption ||
+      q.videoMessage?.caption ||
+      ''
+  ).trim();
+}
+
+function sendtestBody(text, msg) {
+  const after = String(text || '').replace(/^\.sendtest\s*/i, '').trim();
+  if (after) return after;
+  const quoted = quotedPlainText(msg);
+  if (quoted) return quoted;
+  return SENDTEST_TEXT;
+}
+
+function testVcard(label, phone) {
+  const intl = `+${phone}`;
+  return [
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    `FN:${label}`,
+    `N:${label};;;;`,
+    `TEL;type=CELL;type=VOICE;waid=${phone}:${intl}`,
+    'END:VCARD',
+  ].join('\n');
+}
+
+async function handleSavecon(msg) {
+  const chat = msg.key.remoteJid;
+  const list = labeledTestContacts();
+  if (!list.length) {
+    await sock.sendMessage(chat, { text: '❌ Aucun numéro test à enregistrer.' });
+    return;
+  }
+  await sock.sendMessage(chat, {
+    text: `⏳ Enregistrement de ${list.length} contact(s) WhatsApp (*test1* … *test${list.length}*)…`,
+  });
+  const ok = [];
+  const fail = [];
+  for (const c of list) {
+    if (!c.jid) {
+      fail.push({ ...c, error: 'JID invalide' });
+      continue;
+    }
+    try {
+      if (!(await waitForWhatsApp(20000))) throw new Error('WhatsApp déconnecté');
+      const lid = await lidForPhone(c.telephone);
+      await sock.addOrEditContact(c.jid, {
+        fullName: c.label,
+        firstName: c.label,
+        pnJid: c.jid,
+        ...(lid ? { lidJid: lid } : {}),
+        saveOnPrimaryAddressbook: true,
+      });
+      ok.push(c);
+      console.log(`[BOT] .savecon ${c.label} ${c.telephone}`);
+    } catch (e) {
+      console.warn(`[BOT] .savecon ${c.label}:`, e.message);
+      fail.push({ ...c, error: e.message });
+    }
+    await sleep(800);
+  }
+  const lines = [
+    ok.length
+      ? `✅ *${ok.length}/${list.length}* contact(s) enregistré(s) sur WhatsApp`
+      : `❌ *0/${list.length}* contact enregistré`,
+    '',
+    ...list.map((c) => {
+      const mark = ok.some((x) => x.telephone === c.telephone) ? '✅' : '❌';
+      return `${mark} *${c.label}* — ${displayFrPhone(c.telephone)}`;
+    }),
+  ];
+  if (fail.length) {
+    lines.push('', '_Si un nom n’apparaît pas, ouvre la carte contact ci-dessous et tape Ajouter._');
+  }
+  await sock.sendMessage(chat, { text: lines.join('\n') });
+  if (fail.length) {
+    try {
+      await sock.sendMessage(chat, {
+        contacts: {
+          displayName: fail.map((c) => c.label).join(', '),
+          contacts: fail.map((c) => ({ vcard: testVcard(c.label, c.telephone), displayName: c.label })),
+        },
+      });
+    } catch (e) {
+      console.warn('[BOT] .savecon vcard:', e.message);
+    }
+  }
+}
+
+async function handleSendtest(msg, text) {
+  const chat = msg.key.remoteJid;
+  const list = labeledTestContacts();
+  if (!list.length) {
+    await sock.sendMessage(chat, { text: '❌ Aucun numéro test.' });
+    return;
+  }
+  const body = sendtestBody(text, msg);
+  let imageBuffer = null;
+  const imageMsg = imageMessageFromMsg(msg);
+  if (imageMsg) {
+    try {
+      imageBuffer = await bufferFromImageMessage(imageMsg);
+    } catch (e) {
+      console.warn('[BOT] .sendtest image:', e.message);
+    }
+  }
+  await sock.sendMessage(chat, {
+    text: `⏳ Envoi *privé* 1 par 1 à ${list.length} numéro(s) test (${ADD_DELAY_MS / 1000} s entre chaque)…`,
+  });
+  const ok = [];
+  const fail = [];
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i];
+    console.log(`[BOT] .sendtest ${i + 1}/${list.length} ${c.label} ${c.telephone}`);
+    try {
+      if (!(await waitForWhatsApp(45000))) throw new Error('WhatsApp déconnecté');
+      const payload = imageBuffer
+        ? { image: imageBuffer, caption: body }
+        : { text: body };
+      await sock.sendMessage(c.jid, payload);
+      ok.push(c);
+    } catch (e) {
+      console.warn(`[BOT] .sendtest ${c.label}:`, e.message);
+      fail.push({ ...c, error: e.message });
+    }
+    if (i < list.length - 1) {
+      await sleep(ADD_DELAY_MS);
+      if (!waAlive()) await waitForWhatsApp(45000);
+    }
+  }
+  const lines = [
+    ok.length
+      ? `✅ *${ok.length}/${list.length}* message(s) privé(s) envoyé(s)`
+      : `❌ *0/${list.length}* message envoyé`,
+    '_Aucun groupe créé._',
+    '',
+    ...list.map((c) => {
+      const hit = ok.find((x) => x.telephone === c.telephone);
+      const miss = fail.find((x) => x.telephone === c.telephone);
+      if (hit) return `✅ *${c.label}* ${displayFrPhone(c.telephone)}`;
+      return `❌ *${c.label}* ${displayFrPhone(c.telephone)}${miss?.error ? ` — ${miss.error}` : ''}`;
+    }),
+  ];
+  await sendSafe(chat, { text: lines.join('\n') });
+}
+
 async function handleIncomingMessages(m) {
   if (m.type && m.type !== 'notify') return;
   if (!m.messages?.length) return;
@@ -1324,6 +1480,16 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.add') {
         await handleAdd(msg, clean, adminPhone);
+        continue;
+      }
+
+      if (cmd === '.savecon') {
+        await handleSavecon(msg);
+        continue;
+      }
+
+      if (cmd === '.sendtest') {
+        await handleSendtest(msg, clean);
         continue;
       }
 
