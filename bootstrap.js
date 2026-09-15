@@ -104,7 +104,7 @@ function buildEnv(port) {
     lines.push(`BD_TRIEE_DIR=${BD_DIR}`);
   }
   if (!lines.some((l) => l.startsWith('ADD_MODE='))) {
-    lines.push('ADD_MODE=test');
+    lines.push('ADD_MODE=prod');
   }
   return `${lines.join('\n')}\n`;
 }
@@ -126,15 +126,65 @@ function cloneOrUpdate() {
   }
 }
 
+function dirHasTxt(dir) {
+  try {
+    if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return false;
+    return fs.readdirSync(dir).some((f) => f.toLowerCase().endsWith('.txt'));
+  } catch (e) {
+    return false;
+  }
+}
+
+function firstBdWithFiles() {
+  const opts = [
+    process.env.BD_TRIEE_DIR,
+    BD_DIR,
+    path.join(ROOT, 'bd-triee'),
+    path.join(ROOT, 'bd triee'),
+    path.join(ROOT, 'data', 'bd-triee'),
+    '/home/container/bd-triee',
+    '/home/container/bd triee',
+    '/home/container/data/bd-triee',
+  ];
+  for (const raw of opts) {
+    if (!raw) continue;
+    const dir = path.resolve(raw);
+    if (dirHasTxt(dir)) return dir;
+  }
+  return BD_DIR;
+}
+
+function patchEnvFile(file, updates) {
+  let text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  for (const [key, val] of Object.entries(updates)) {
+    const escaped = /[\s#]/.test(val) ? `"${String(val).replace(/"/g, '\\"')}"` : val;
+    const line = `${key}=${escaped}`;
+    const re = new RegExp(`^${key}=.*$`, 'm');
+    if (re.test(text)) text = text.replace(re, line);
+    else text += `${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
+  }
+  fs.writeFileSync(file, text);
+}
+
 function syncEnv(port) {
   const dest = path.join(APP_DIR, '.env');
   if (fs.existsSync(ROOT_ENV)) {
     fs.copyFileSync(ROOT_ENV, dest);
     console.log('[group-bot bootstrap] .env copié vers l’app');
-    return;
+  } else {
+    fs.writeFileSync(dest, buildEnv(port), 'utf8');
+    console.log('[group-bot bootstrap] .env généré depuis variables panneau');
   }
-  fs.writeFileSync(dest, buildEnv(port), 'utf8');
-  console.log('[group-bot bootstrap] .env généré depuis variables panneau');
+  const bd = firstBdWithFiles();
+  process.env.BD_TRIEE_DIR = bd;
+  process.env.BOT_DATA_DIR = process.env.BOT_DATA_DIR || DATA_DIR;
+  process.env.WA_AUTH_DIR = process.env.WA_AUTH_DIR || AUTH_DIR;
+  patchEnvFile(dest, {
+    BOT_DATA_DIR: process.env.BOT_DATA_DIR,
+    WA_AUTH_DIR: process.env.WA_AUTH_DIR,
+    BD_TRIEE_DIR: bd,
+  });
+  console.log(`[group-bot bootstrap] BD_TRIEE_DIR=${bd}`);
 }
 
 loadRootEnv();

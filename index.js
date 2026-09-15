@@ -29,7 +29,7 @@ const {
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel, setAddMode } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
+const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -1829,6 +1829,7 @@ app.listen(PORT, '0.0.0.0', () => {
     } else {
       const n = reloadProdCache();
       console.log(`[BOT] pool PROD: ${n} numéros`);
+      console.log(`[BOT] BD : ${bdDir()}`);
     }
   } catch (e) {
     console.warn('[BOT] BD:', e.message);
