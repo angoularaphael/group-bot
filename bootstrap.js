@@ -138,18 +138,33 @@ function dirHasTxt(dir) {
 function firstBdWithFiles() {
   const opts = [
     process.env.BD_TRIEE_DIR,
+    DATA_DIR,
     BD_DIR,
     path.join(ROOT, 'bd-triee'),
     path.join(ROOT, 'bd triee'),
     path.join(ROOT, 'data', 'bd-triee'),
+    '/home/container/data',
     '/home/container/bd-triee',
     '/home/container/bd triee',
     '/home/container/data/bd-triee',
   ];
+  const seen = new Set();
   for (const raw of opts) {
     if (!raw) continue;
     const dir = path.resolve(raw);
+    if (seen.has(dir)) continue;
+    seen.add(dir);
     if (dirHasTxt(dir)) return dir;
+    try {
+      const kids = fs.readdirSync(dir, { withFileTypes: true });
+      for (const k of kids) {
+        if (!k.isDirectory()) continue;
+        const sub = path.join(dir, k.name);
+        if (dirHasTxt(sub)) return sub;
+      }
+    } catch (e) {
+      /* ignore */
+    }
   }
   return BD_DIR;
 }
