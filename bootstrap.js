@@ -40,7 +40,6 @@ const ENV_KEYS = [
   'WA_AUTH_DIR',
   'ADD_BATCH',
   'ADD_DELAY_MS',
-  'SENDTEST_TEXT',
 ];
 
 function loadRootEnv() {

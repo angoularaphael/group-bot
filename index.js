@@ -45,6 +45,7 @@ const {
   shouldTryNextJid,
   shouldInviteAfterFail,
 } = require('./lib/add-status');
+const { seanceOfferteWhatsAppText, waFirstName } = require('./lib/david-wa');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -57,7 +58,6 @@ const CONFIG_FILE = process.env.BOT_CONFIG_FILE
 const MANDATORY_ADMIN_PHONE = normalizePhone(process.env.MANDATORY_ADMIN_PHONE || '33762641473');
 const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
 const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
-const SENDTEST_TEXT = String(process.env.SENDTEST_TEXT || '👋 Test bot — message privé (pas de groupe).').trim();
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
@@ -300,7 +300,7 @@ function menuText() {
     '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.savecon` — enregistrer les numéros test dans les contacts WhatsApp (`test1`…)',
-    '`.sendtest` — leur envoyer un message *privé* un par un (pas de groupe)',
+    '`.sendtest` — message David séance offerte, en privé, avec le prénom',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
@@ -1220,26 +1220,6 @@ async function handleAdd(msg, text, adminPhone) {
   await sendSafe(chat, { text: lines.filter(Boolean).join('\n') });
 }
 
-function quotedPlainText(msg) {
-  const q = contextInfo(msg)?.quotedMessage;
-  if (!q) return '';
-  return String(
-    q.conversation ||
-      q.extendedTextMessage?.text ||
-      q.imageMessage?.caption ||
-      q.videoMessage?.caption ||
-      ''
-  ).trim();
-}
-
-function sendtestBody(text, msg) {
-  const after = String(text || '').replace(/^\.sendtest\s*/i, '').trim();
-  if (after) return after;
-  const quoted = quotedPlainText(msg);
-  if (quoted) return quoted;
-  return SENDTEST_TEXT;
-}
-
 function testVcard(label, phone) {
   const intl = `+${phone}`;
   return [
@@ -1315,37 +1295,25 @@ async function handleSavecon(msg) {
   }
 }
 
-async function handleSendtest(msg, text) {
+async function handleSendtest(msg) {
   const chat = msg.key.remoteJid;
   const list = labeledTestContacts();
   if (!list.length) {
     await sock.sendMessage(chat, { text: '❌ Aucun numéro test.' });
     return;
   }
-  const body = sendtestBody(text, msg);
-  let imageBuffer = null;
-  const imageMsg = imageMessageFromMsg(msg);
-  if (imageMsg) {
-    try {
-      imageBuffer = await bufferFromImageMessage(imageMsg);
-    } catch (e) {
-      console.warn('[BOT] .sendtest image:', e.message);
-    }
-  }
   await sock.sendMessage(chat, {
-    text: `⏳ Envoi *privé* 1 par 1 à ${list.length} numéro(s) test (${ADD_DELAY_MS / 1000} s entre chaque)…`,
+    text: `⏳ Message David (séance offerte) en privé, 1 par 1, avec le prénom (${ADD_DELAY_MS / 1000} s entre chaque)…`,
   });
   const ok = [];
   const fail = [];
   for (let i = 0; i < list.length; i++) {
     const c = list[i];
-    console.log(`[BOT] .sendtest ${i + 1}/${list.length} ${c.label} ${c.telephone}`);
+    const body = seanceOfferteWhatsAppText(c);
+    console.log(`[BOT] .sendtest ${i + 1}/${list.length} ${c.label} ${waFirstName(c) || c.telephone}`);
     try {
       if (!(await waitForWhatsApp(45000))) throw new Error('WhatsApp déconnecté');
-      const payload = imageBuffer
-        ? { image: imageBuffer, caption: body }
-        : { text: body };
-      await sock.sendMessage(c.jid, payload);
+      await sock.sendMessage(c.jid, { text: body }, { linkPreview: false });
       ok.push(c);
     } catch (e) {
       console.warn(`[BOT] .sendtest ${c.label}:`, e.message);
@@ -1358,15 +1326,16 @@ async function handleSendtest(msg, text) {
   }
   const lines = [
     ok.length
-      ? `✅ *${ok.length}/${list.length}* message(s) privé(s) envoyé(s)`
+      ? `✅ *${ok.length}/${list.length}* message(s) David envoyé(s)`
       : `❌ *0/${list.length}* message envoyé`,
-    '_Aucun groupe créé._',
+    '_Privé, personnalisé, pas de groupe._',
     '',
     ...list.map((c) => {
+      const who = waFirstName(c) || c.label;
       const hit = ok.find((x) => x.telephone === c.telephone);
       const miss = fail.find((x) => x.telephone === c.telephone);
-      if (hit) return `✅ *${c.label}* ${displayFrPhone(c.telephone)}`;
-      return `❌ *${c.label}* ${displayFrPhone(c.telephone)}${miss?.error ? ` — ${miss.error}` : ''}`;
+      if (hit) return `✅ *${c.label}* ${who} — ${displayFrPhone(c.telephone)}`;
+      return `❌ *${c.label}* ${who} — ${displayFrPhone(c.telephone)}${miss?.error ? ` — ${miss.error}` : ''}`;
     }),
   ];
   await sendSafe(chat, { text: lines.join('\n') });
@@ -1489,7 +1458,7 @@ async function handleIncomingMessages(m) {
       }
 
       if (cmd === '.sendtest') {
-        await handleSendtest(msg, clean);
+        await handleSendtest(msg);
         continue;
       }
 
