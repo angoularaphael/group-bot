@@ -29,7 +29,7 @@ const {
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, testNumbersLabel } = require('./lib/contacts');
+const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -39,6 +39,12 @@ const {
   kickTargets,
   chunk,
 } = require('./lib/group-mod');
+const {
+  addStatusCode,
+  isAddSuccess,
+  shouldTryNextJid,
+  shouldInviteAfterFail,
+} = require('./lib/add-status');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -304,14 +310,6 @@ function slimAddResult(result) {
   }));
 }
 
-function addStatusCode(row) {
-  if (row == null) return 0;
-  const raw = row.status ?? row.error;
-  if (raw == null || raw === '') return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function matchAddRow(rows, requestedJid, phone) {
   const want = jidNormalizedUser(requestedJid || '') || requestedJid;
   const found = rows.find((r) => {
@@ -418,11 +416,17 @@ async function addParticipantsBatched(groupId, items) {
         console.log('[BOT] add raw', JSON.stringify(slimAddResult(result)));
         const row = matchAddRow(rows, jid, item.phone) || (rows.length === 1 ? rows[0] : null);
         const code = addStatusCode(row);
-        if (code === 200 || code === 409) {
+        if (isAddSuccess(code)) {
           ok.push({ ...item, jid, code });
-        } else {
-          fail.push({ ...item, jid, code: code || 0, error: row ? `status ${code}` : 'pas de réponse WA' });
+          done = true;
+          break;
         }
+        const failRow = { ...item, jid, code: code || 0, error: row ? `status ${code}` : 'pas de réponse WA' };
+        if (shouldTryNextJid(code) && jid !== candidates[candidates.length - 1]) {
+          console.warn(`[BOT] add ${item.phone} status ${code} via ${jid} — essai JID suivant`);
+          continue;
+        }
+        fail.push(failRow);
         done = true;
         break;
       } catch (e) {
@@ -841,6 +845,19 @@ async function handleAdd(msg, text, adminPhone) {
   }
 
   const skipAlready = new Set(members.phones);
+  const subjectEarly = members.meta?.subject || '';
+  for (const contact of allContactsForAdd()) {
+    if (!skipAlready.has(contact.telephone)) continue;
+    markPhone(contact.telephone, {
+      status: 'added',
+      groupId,
+      groupName: subjectEarly,
+      nom: contact.nom,
+      prenom: contact.prenom,
+      ville: contact.ville,
+    });
+  }
+
   const pool = poolStats();
   const mode = modeLabel();
   const available = Math.max(0, pool.available);
@@ -957,7 +974,9 @@ async function handleAdd(msg, text, adminPhone) {
         }
         continue;
       }
-      if (row.code === 403 || row.code === 401 || row.code === 400 || row.code === 0 || row.code === 500) {
+      if (row.code === 463) {
+        failed.push({ contact, code: 463, error: row.error });
+      } else if (shouldInviteAfterFail(row.code)) {
         try {
           const link = await sendGroupInvite(row.pnJid || row.jid, groupId, subject);
           groupLink = groupLink || link;
@@ -1023,8 +1042,16 @@ async function handleAdd(msg, text, adminPhone) {
   if (leftover > 0 && !addedContacts.length && invited.length) {
     lines.push('', '_Personne n’est encore dans le groupe tant qu’ils n’ont pas accepté l’invitation._');
   } else if (leftover > 0) {
+    const reasons = [];
+    if (invited.length) reasons.push(`${invited.length} invitation(s) à accepter`);
+    if (failed.length) reasons.push(`${failed.length} refus`);
+    if (notWa.length) reasons.push(`${notWa.length} hors WhatsApp`);
     const left = poolStats().available;
-    lines.push('', `ℹ️ ${leftover} manquant(s) — ${left} encore dispo dans la base.`);
+    if (reasons.length) {
+      lines.push('', `ℹ️ ${leftover} pas encore dans le groupe (${reasons.join(', ')}).`);
+    } else {
+      lines.push('', `ℹ️ ${leftover} manquant(s) — ${left} encore dispo dans la base.`);
+    }
   }
   if (groupLink && (invited.length || failed.length)) {
     lines.push('', `🔗 ${groupLink}`);
