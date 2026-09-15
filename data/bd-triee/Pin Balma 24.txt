@@ -1,0 +1,8 @@
+nom;prenom;ville;telephone;email;date_naissance
+rigaud;marion;pin balma;618307071;marion_rigaud@yahoo.fr;1984-03-26
+Perusin;Rita;pin balma;638165533;rita_3123@yahoo.com;1997-09-22
+frias;amanda;pin balma;611683288;amandine312009@hotmail.fr;1986-06-15
+Bonzom;Laetitia;PIN BALMA;613452025;laetitiapresson84@gmail.com;1984-06-15
+ibanes;megane;pin balma;646515093;ibanes.meg@gmail.com;1993-07-16
+hereng;aurelie;pin balma;618555735;aureliehereng1@gmail.com;1989-04-14
+Labeuche;Gregory;PIN BALMA;682335959;labeuche.gregory@hotmail.fr;1992-01-01

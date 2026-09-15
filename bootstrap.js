@@ -202,6 +202,23 @@ function syncEnv(port) {
   console.log(`[group-bot bootstrap] BD_TRIEE_DIR=${bd}`);
 }
 
+function syncBdFromRepo() {
+  const from = path.join(APP_DIR, 'data', 'bd-triee');
+  if (!fs.existsSync(from)) {
+    console.warn('[group-bot bootstrap] pas de data/bd-triee dans le repo');
+    return;
+  }
+  fs.mkdirSync(BD_DIR, { recursive: true });
+  let n = 0;
+  for (const name of fs.readdirSync(from)) {
+    if (!/\.(txt|csv)$/i.test(name)) continue;
+    fs.copyFileSync(path.join(from, name), path.join(BD_DIR, name));
+    n += 1;
+  }
+  process.env.BD_TRIEE_DIR = BD_DIR;
+  console.log(`[group-bot bootstrap] ${n} fichier(s) BD copiés vers ${BD_DIR}`);
+}
+
 loadRootEnv();
 const BOT_PORT = resolvePort();
 process.env.PORT = BOT_PORT;
@@ -245,6 +262,7 @@ try {
 
 cloneOrUpdate();
 syncEnv(BOT_PORT);
+syncBdFromRepo();
 
 if (!fs.existsSync(path.join(APP_DIR, 'index.js'))) {
   console.error('[group-bot bootstrap] index.js introuvable après clone');
