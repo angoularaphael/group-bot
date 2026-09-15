@@ -28,7 +28,7 @@ const {
   jidBare,
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel } = require('./lib/mode');
-const { markPhone, rememberGroup, stats: usedStats } = require('./lib/used');
+const { markPhone, unmarkPhone, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
 const { pickUnused, poolStats, displayName, reloadProdCache } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 
@@ -279,30 +279,116 @@ async function onWhatsAppExists(jids) {
   }
 }
 
-function statusFromAddResult(result, jid) {
-  if (!result) return 200;
-  const failCodes = new Set([400, 401, 403, 404, 405, 406, 408, 429, 500]);
-  const pick = (row) => {
-    if (row == null) return null;
-    if (typeof row === 'number' || typeof row === 'string') return Number(row);
-    if (row.status != null) return Number(row.status);
-    return null;
-  };
-  if (result.status && typeof result.status === 'object' && !Array.isArray(result.status)) {
-    const row = result.status[jid] || result.status[jid.split('@')[0]];
-    const code = pick(row);
-    if (code != null) return failCodes.has(code) ? code : 200;
+function slimAddResult(result) {
+  const rows = Array.isArray(result) ? result : [];
+  return rows.map((r) => ({
+    jid: r?.jid || '',
+    status: r?.status != null ? String(r.status) : '',
+  }));
+}
+
+function addStatusCode(row) {
+  if (row == null) return 0;
+  const raw = row.status ?? row.error;
+  if (raw == null || raw === '') return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function matchAddRow(rows, requestedJid, phone) {
+  const want = jidNormalizedUser(requestedJid || '') || requestedJid;
+  const found = rows.find((r) => {
+    const j = r?.jid || '';
+    if (!j) return false;
+    if (j === requestedJid || jidNormalizedUser(j) === want) return true;
+    if (phone && normalizePhone(j) === phone) return true;
+    return false;
+  });
+  return found || null;
+}
+
+async function resolveAddJid(phone) {
+  const pn = phoneToJid(phone);
+  try {
+    const lid = await sock.signalRepository?.lidMapping?.getLIDForPN(pn);
+    if (lid) return lid;
+  } catch (e) {
+    console.warn('[BOT] getLIDForPN', phone, e.message);
   }
-  if (result[jid] || result[jid.split('@')[0]]) {
-    const code = pick(result[jid] || result[jid.split('@')[0]]);
-    if (code != null) return failCodes.has(code) ? code : 200;
+  return pn;
+}
+
+async function phonesInGroup(groupId) {
+  const meta = await sock.groupMetadata(groupId);
+  const phones = new Set();
+  const map = sock.signalRepository?.lidMapping;
+  for (const p of meta.participants || []) {
+    if (p.phoneNumber) phones.add(normalizePhone(p.phoneNumber));
+    if (p.id && isPnJid(p.id)) phones.add(normalizePhone(p.id));
+    if (p.id && isLidJid(p.id) && map?.getPNForLID) {
+      try {
+        const pn = await map.getPNForLID(p.id);
+        if (pn) phones.add(normalizePhone(pn));
+      } catch (e) {
+        /* ignore */
+      }
+    }
   }
-  if (Array.isArray(result)) {
-    const row = result.find((r) => r.jid === jid || r === jid);
-    const code = pick(row);
-    if (code != null) return failCodes.has(code) ? code : 200;
+  const me = botPhone();
+  if (me) phones.add(me);
+  return { meta, phones };
+}
+
+async function sendGroupInvite(toJid, groupId, subject) {
+  const code = await sock.groupInviteCode(groupId);
+  if (!code) throw new Error('pas de code d’invitation');
+  const expiration = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+  try {
+    await sock.sendMessage(toJid, {
+      groupInvite: {
+        inviteCode: code,
+        inviteExpiration: expiration,
+        text: `Invitation au groupe ${subject}`,
+        jid: groupId,
+        subject,
+      },
+    });
+  } catch (e) {
+    console.warn('[BOT] groupInvite msg:', e.message);
+    await sock.sendMessage(toJid, {
+      text: `Tu es invité(e) au groupe *${subject}*\nhttps://chat.whatsapp.com/${code}`,
+    });
   }
-  return 200;
+  return `https://chat.whatsapp.com/${code}`;
+}
+
+async function addParticipantsBatched(groupId, items) {
+  const ok = [];
+  const fail = [];
+  for (let i = 0; i < items.length; i += ADD_BATCH) {
+    const batch = items.slice(i, i + ADD_BATCH);
+    const jids = batch.map((x) => x.jid);
+    try {
+      const result = await sock.groupParticipantsUpdate(groupId, jids, 'add');
+      const rows = Array.isArray(result) ? result : [];
+      console.log('[BOT] add raw', JSON.stringify(slimAddResult(result)));
+      for (let k = 0; k < batch.length; k++) {
+        const item = batch[k];
+        let row = matchAddRow(rows, item.jid, item.phone);
+        if (!row && rows.length === batch.length) row = rows[k];
+        const code = addStatusCode(row);
+        if (code === 200 || code === 409) ok.push({ ...item, code });
+        else fail.push({ ...item, code: code || 0, error: row ? `status ${code}` : 'pas de réponse WA' });
+      }
+    } catch (e) {
+      console.warn('[BOT] add batch:', e.message);
+      const code = isReachoutError(e) ? 463 : 500;
+      for (const item of batch) fail.push({ ...item, code, error: e.message });
+      if (isReachoutError(e)) break;
+    }
+    if (i + ADD_BATCH < items.length) await sleep(ADD_DELAY_MS);
+  }
+  return { ok, fail };
 }
 
 function isReachoutError(err) {
@@ -354,29 +440,6 @@ async function createGroupSafe(name, extraParticipantJid) {
     console.log('[BOT] retry groupCreate with', extraParticipantJid);
     return await sock.groupCreate(name, [extraParticipantJid]);
   }
-}
-
-async function addParticipantsBatched(groupId, jids) {
-  const ok = [];
-  const fail = [];
-  for (let i = 0; i < jids.length; i += ADD_BATCH) {
-    const batch = jids.slice(i, i + ADD_BATCH);
-    try {
-      const result = await sock.groupParticipantsUpdate(groupId, batch, 'add');
-      for (const jid of batch) {
-        const code = statusFromAddResult(result, jid);
-        if (code === 200 || code === 409) ok.push({ jid, code });
-        else fail.push({ jid, code });
-      }
-    } catch (e) {
-      console.warn('[BOT] add batch:', e.message);
-      const code = isReachoutError(e) ? 463 : 500;
-      for (const jid of batch) fail.push({ jid, code, error: e.message });
-      if (isReachoutError(e)) break;
-    }
-    if (i + ADD_BATCH < jids.length) await sleep(ADD_DELAY_MS);
-  }
-  return { ok, fail };
 }
 
 async function handleCgroup(msg, text, adminPhone) {
@@ -525,9 +588,26 @@ async function handleAdd(msg, text, adminPhone) {
     return;
   }
 
+  let members;
+  try {
+    members = await phonesInGroup(groupId);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Impossible de lire les membres du groupe : ' + e.message });
+    return;
+  }
+
+  for (const [phone, row] of Object.entries(loadUsed().phones || {})) {
+    if (row.status === 'added' && row.groupId === groupId && !members.phones.has(phone)) {
+      console.log('[BOT] faux marquage, on retire', phone);
+      unmarkPhone(phone);
+    }
+  }
+
+  const skipAlready = new Set(members.phones);
   const pool = poolStats();
   const mode = modeLabel();
-  if (pool.available < 1) {
+  const available = Math.max(0, pool.available);
+  if (available < 1) {
     await sock.sendMessage(chat, {
       text: `ℹ️ Plus personne de dispo en mode *${mode}* (${pool.pool} dans la base, déjà utilisés ou hors WhatsApp).`,
     });
@@ -535,15 +615,18 @@ async function handleAdd(msg, text, adminPhone) {
   }
 
   await sock.sendMessage(chat, {
-    text: `⏳ Mode *${mode}* — recherche de ${n} personne(s) (${pool.available} dispo)…`,
+    text: `⏳ Mode *${mode}* — recherche de ${n} personne(s) (${available} dispo, ${members.phones.size} déjà dans le groupe)…`,
   });
 
-  const subject = (await groupSubject(groupId)) || 'groupe';
+  const subject = members.meta?.subject || (await groupSubject(groupId)) || 'groupe';
   const addedContacts = [];
+  const alreadyIn = [];
   const notWa = [];
+  const invited = [];
   const failed = [];
-  const tried = new Set();
+  const tried = new Set(skipAlready);
   let safety = 0;
+  let groupLink = '';
 
   while (addedContacts.length < n && safety < n + 400) {
     safety += 1;
@@ -559,10 +642,13 @@ async function handleAdd(msg, text, adminPhone) {
       const phone = normalizePhone(row.jid);
       if (phone) existsByPhone.set(phone, row.exists !== false);
     }
-    const byPhone = new Map(batch.map((c) => [c.telephone, c]));
+
     const toAdd = [];
     for (const contact of batch) {
-      const jid = phoneToJid(contact.telephone);
+      if (skipAlready.has(contact.telephone)) {
+        alreadyIn.push(contact);
+        continue;
+      }
       if (existsByPhone.has(contact.telephone) && existsByPhone.get(contact.telephone) === false) {
         notWa.push(contact);
         markPhone(contact.telephone, {
@@ -573,36 +659,90 @@ async function handleAdd(msg, text, adminPhone) {
         });
         continue;
       }
-      toAdd.push({ contact, jid });
+      const jid = await resolveAddJid(contact.telephone);
+      toAdd.push({ contact, jid, phone: contact.telephone, pnJid: phoneToJid(contact.telephone) });
     }
     if (!toAdd.length) continue;
 
-    const { ok, fail } = await addParticipantsBatched(groupId, toAdd.map((x) => x.jid));
-    const okSet = new Set(ok.map((r) => normalizePhone(r.jid)));
-    for (const { contact, jid } of toAdd) {
-      if (okSet.has(contact.telephone) && addedContacts.length < n) {
-        addedContacts.push(contact);
-        markPhone(contact.telephone, {
-          status: 'added',
-          groupId,
-          groupName: subject,
-          nom: contact.nom,
-          prenom: contact.prenom,
-          ville: contact.ville,
-        });
+    const { ok, fail } = await addParticipantsBatched(groupId, toAdd);
+    await sleep(800);
+    let verifiedPhones = skipAlready;
+    try {
+      const fresh = await phonesInGroup(groupId);
+      verifiedPhones = fresh.phones;
+      members = fresh;
+    } catch (e) {
+      console.warn('[BOT] relecture membres:', e.message);
+    }
+
+    for (const row of ok) {
+      const contact = row.contact;
+      if (!contact) continue;
+      if (verifiedPhones.has(contact.telephone)) {
+        if (addedContacts.length < n) {
+          addedContacts.push(contact);
+          skipAlready.add(contact.telephone);
+          markPhone(contact.telephone, {
+            status: 'added',
+            groupId,
+            groupName: subject,
+            nom: contact.nom,
+            prenom: contact.prenom,
+            ville: contact.ville,
+          });
+        }
+      } else {
+        fail.push({ ...row, code: row.code === 409 ? 409 : 403, error: 'WA a dit OK mais absent du groupe' });
       }
     }
+
     for (const row of fail) {
-      const phone = normalizePhone(row.jid);
-      const contact = byPhone.get(phone);
-      if (contact) failed.push({ contact, code: row.code });
+      const contact = row.contact;
+      if (!contact) continue;
+      if (verifiedPhones.has(contact.telephone)) {
+        if (addedContacts.length < n && !addedContacts.some((c) => c.telephone === contact.telephone)) {
+          addedContacts.push(contact);
+          markPhone(contact.telephone, {
+            status: 'added',
+            groupId,
+            groupName: subject,
+            nom: contact.nom,
+            prenom: contact.prenom,
+            ville: contact.ville,
+          });
+        }
+        continue;
+      }
+      if (row.code === 403 || row.code === 401 || row.code === 0) {
+        try {
+          const link = await sendGroupInvite(row.pnJid || row.jid, groupId, subject);
+          groupLink = groupLink || link;
+          invited.push(contact);
+        } catch (e) {
+          console.warn('[BOT] invite', contact.telephone, e.message);
+          failed.push({ contact, code: row.code || 403, error: e.message });
+        }
+      } else {
+        failed.push({ contact, code: row.code, error: row.error });
+      }
     }
   }
 
   rememberLastGroup(adminPhone, groupId);
+  if (!groupLink) {
+    try {
+      const code = await sock.groupInviteCode(groupId);
+      if (code) groupLink = `https://chat.whatsapp.com/${code}`;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   const leftover = n - addedContacts.length;
   const lines = [
-    `✅ *${addedContacts.length}/${n}* ajouté(s) dans *${subject}*`,
+    addedContacts.length
+      ? `✅ *${addedContacts.length}/${n}* vraiment dans *${subject}*`
+      : `❌ *0/${n}* ajouté(s) dans *${subject}*`,
     `📥 Mode \`.add\` : *${mode}*`,
   ];
   if (isTestAddMode()) {
@@ -612,26 +752,38 @@ async function handleAdd(msg, text, adminPhone) {
     lines.push('', ...addedContacts.slice(0, 15).map((c, i) => `${i + 1}. ${displayName(c)} (${c.telephone})`));
     if (addedContacts.length > 15) lines.push(`… +${addedContacts.length - 15} autres`);
   }
-  if (notWa.length) lines.push('', `⚠️ ${notWa.length} numéro(s) pas sur WhatsApp (marqués, ignorés ensuite).`);
-  if (failed.some((f) => f.code === 463)) {
-    let invite = '';
-    try {
-      const code = await sock.groupInviteCode(groupId);
-      if (code) invite = `https://chat.whatsapp.com/${code}`;
-    } catch (e) {
-      /* ignore */
-    }
+  if (alreadyIn.length) {
+    lines.push('', `ℹ️ ${alreadyIn.length} déjà dans le groupe (ignoré) : ${alreadyIn.map(displayName).join(', ')}`);
+  }
+  if (invited.length) {
     lines.push(
       '',
-      '❌ WhatsApp bloque l’ajout *direct* de nouveaux numéros (même restriction que `.cgroup`).',
-      invite ? `Envoie ce lien : ${invite}` : 'Partage le lien d’invitation du groupe.'
+      `📩 ${invited.length} invitation(s) envoyée(s) (confidentialité WhatsApp — ils doivent cliquer) :`,
+      ...invited.slice(0, 10).map((c) => `• ${displayName(c)} (${c.telephone})`)
+    );
+  }
+  if (notWa.length) lines.push('', `⚠️ ${notWa.length} numéro(s) pas sur WhatsApp (marqués, ignorés ensuite).`);
+  if (failed.some((f) => f.code === 463)) {
+    lines.push(
+      '',
+      '❌ WhatsApp bloque l’ajout *direct* de nouveaux numéros (reach out).',
+      groupLink ? `Lien du groupe : ${groupLink}` : 'Partage le lien d’invitation du groupe.'
     );
   } else if (failed.length) {
-    lines.push(`⚠️ ${failed.length} refus(s) WhatsApp (confidentialité / limite) — *non marqués*.`);
+    lines.push(
+      '',
+      `⚠️ ${failed.length} refus(s) :`,
+      ...failed.slice(0, 8).map((f) => `• ${displayName(f.contact)} → ${f.code || '?'} ${f.error || ''}`.trim())
+    );
   }
-  if (leftover > 0) {
+  if (leftover > 0 && !addedContacts.length && invited.length) {
+    lines.push('', '_Personne n’est encore dans le groupe tant qu’ils n’ont pas accepté l’invitation._');
+  } else if (leftover > 0) {
     const left = poolStats().available;
     lines.push('', `ℹ️ ${leftover} manquant(s) — ${left} encore dispo dans la base.`);
+  }
+  if (groupLink && (invited.length || failed.length)) {
+    lines.push('', `🔗 ${groupLink}`);
   }
   await sock.sendMessage(chat, { text: lines.join('\n') });
 }
