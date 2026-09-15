@@ -7,5 +7,6 @@ data/used.json
 data/mode.json
 data/groups.json
 data/bot_config.json
+data/job.json
 data/auth_info_baileys/
 *.log

@@ -46,6 +46,23 @@ const {
   shouldInviteAfterFail,
 } = require('./lib/add-status');
 const { seanceOfferteWhatsAppText, waFirstName, waContactName } = require('./lib/david-wa');
+const {
+  startJob,
+  touchCurrent,
+  markOk,
+  markFail,
+  logDisconnect,
+  logReconnect,
+  pauseJob,
+  finishJob,
+  markNotified,
+  resumeLines,
+  statsLines,
+  lastLogLines,
+  notifyPausedText,
+  loadJob,
+  contactLabel,
+} = require('./lib/job');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -65,7 +82,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.savecon', '.sendtest', '.sendfull',
+  '.savecon', '.sendtest', '.sendfull', '.log',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -277,6 +294,18 @@ async function waitForWhatsApp(timeoutMs = 30000) {
   return waAlive();
 }
 
+async function ensureWhatsAppOrPause(contact, timeoutMs = 45000) {
+  if (waAlive()) return true;
+  logDisconnect('WhatsApp coupé — attente reconnexion');
+  const recovered = await waitForWhatsApp(timeoutMs);
+  if (recovered) {
+    logReconnect();
+    return true;
+  }
+  pauseJob('WhatsApp déconnecté', contact);
+  return false;
+}
+
 async function sendSafe(jid, content) {
   if (!(await waitForWhatsApp(20000))) {
     console.warn('[BOT] send ignoré (WhatsApp coupé)');
@@ -303,12 +332,13 @@ function menuText() {
     '`.mute` — seuls les *admins* peuvent écrire',
     '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
-    '`.savecon` — enregistrer *3000* contacts de la BD (marque ceux déjà sauvés)',
-    '`.sendfull` — message David aux *3000* contacts déjà enregistrés',
+    '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
+    '`.sendfull` — message David aux contacts sauvés (reprend aussi)',
     '`.sendtest` — message David aux 5 numéros test',
+    '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
-    '`.stats` — restants / déjà utilisés',
+    '`.stats` — restants / déjà utilisés / reprise',
     '`.reset` — vider les marqueurs (numéros réutilisables pour `.add`)',
     '`.ping` — test',
     '',
@@ -479,16 +509,14 @@ async function addParticipantsBatched(groupId, items) {
   const retries = new Map();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
+    const contact = item.contact || item;
+    touchCurrent(contact, i + 1);
     console.log(`[BOT] .add ${i + 1}/${items.length} ${item.phone} (1 par 1, ${ADD_DELAY_MS / 1000}s)`);
-    if (!waAlive()) {
-      console.warn('[BOT] WhatsApp coupé — attente reconnexion avant le prochain ajout…');
-      const recovered = await waitForWhatsApp(45000);
-      if (!recovered) {
-        for (let j = i; j < items.length; j++) {
-          fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
-        }
-        break;
+    if (!(await ensureWhatsAppOrPause(contact, 45000))) {
+      for (let j = i; j < items.length; j++) {
+        fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
       }
+      break;
     }
     const candidates = [...new Set((item.jids && item.jids.length ? item.jids : [item.jid, item.pnJid]).filter(Boolean).map(cleanJid))];
     let done = false;
@@ -503,6 +531,7 @@ async function addParticipantsBatched(groupId, items) {
         const code = addStatusCode(row);
         if (isAddSuccess(code)) {
           ok.push({ ...item, jid, code });
+          markOk(contact);
           done = true;
           break;
         }
@@ -517,22 +546,23 @@ async function addParticipantsBatched(groupId, items) {
       } catch (e) {
         console.warn(`[BOT] add ${item.phone} via ${jid}:`, e.message);
         if (isDisconnectError(e) || !sock) {
-          console.warn('[BOT] coupure pendant l’ajout — on attend puis on reprend la même personne');
-          const recovered = await waitForWhatsApp(45000);
-          if (recovered) {
-            const nTry = (retries.get(item.phone) || 0) + 1;
-            retries.set(item.phone, nTry);
-            if (nTry <= 2) i -= 1;
-            else fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
+          if (!(await ensureWhatsAppOrPause(contact, 45000))) {
+            fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
+            for (let j = i + 1; j < items.length; j++) {
+              fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
+            }
             done = true;
+            i = items.length;
             break;
           }
-          fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
-          for (let j = i + 1; j < items.length; j++) {
-            fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
+          const nTry = (retries.get(item.phone) || 0) + 1;
+          retries.set(item.phone, nTry);
+          if (nTry <= 2) i -= 1;
+          else {
+            markFail(contact, 'WhatsApp déconnecté');
+            fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
           }
           done = true;
-          i = items.length;
           break;
         }
         if (isReachoutError(e)) {
@@ -558,15 +588,11 @@ async function addParticipantsBatched(groupId, items) {
     }
     if (i < items.length - 1 && i >= 0) {
       await sleep(ADD_DELAY_MS);
-      if (!waAlive()) {
-        console.warn('[BOT] attente reconnexion avant la personne suivante…');
-        const recovered = await waitForWhatsApp(45000);
-        if (!recovered) {
-          for (let j = i + 1; j < items.length; j++) {
-            fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
-          }
-          break;
+      if (!(await ensureWhatsAppOrPause(contact, 45000))) {
+        for (let j = i + 1; j < items.length; j++) {
+          fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
         }
+        break;
       }
     }
   }
@@ -1023,8 +1049,13 @@ async function handleAdd(msg, text, adminPhone) {
     return;
   }
 
+  const addResume = resumeLines('.add');
+  startJob({ command: '.add', total: n, chat });
   await sock.sendMessage(chat, {
-    text: `⏳ Mode *${mode}* — ajout *1 par 1* (${n} pers., 3 s entre chaque)…`,
+    text: [
+      `⏳ Mode *${mode}* — ajout *1 par 1* (${n} pers., 3 s entre chaque)…`,
+      ...addResume,
+    ].filter(Boolean).join('\n'),
   });
 
   const subject = members.meta?.subject || (await groupSubject(groupId)) || 'groupe';
@@ -1188,10 +1219,13 @@ async function handleAdd(msg, text, adminPhone) {
   }
   if (notWa.length) lines.push('', `⚠️ ${notWa.length} numéro(s) pas sur WhatsApp (marqués, ignorés ensuite).`);
   if (failed.some((f) => f.code === 503)) {
+    const cut = loadJob();
     lines.push(
       '',
-      '⚠️ WhatsApp a coupé la session pendant l’ajout. Le bot se reconnecte tout seul.',
-      leftover > 0 ? `Retape \`.add ${leftover}\` dans ce groupe pour continuer.` : ''
+      '⚠️ WhatsApp a coupé la session pendant l’ajout.',
+      cut.stoppedAt ? `Arrêté sur : *${contactLabel(cut.stoppedAt)}*` : '',
+      cut.lastOk ? `Dernier OK : ${contactLabel(cut.lastOk)}` : '',
+      leftover > 0 ? `Retape \`.add ${leftover}\` dans ce groupe — ça reprend après les déjà ajoutés.` : ''
     );
   } else if (failed.some((f) => f.code === 463)) {
     lines.push(
@@ -1223,6 +1257,8 @@ async function handleAdd(msg, text, adminPhone) {
   if (groupLink && (invited.length || failed.length)) {
     lines.push('', `🔗 ${groupLink}`);
   }
+  if (loadJob().status === 'paused') markNotified();
+  else finishJob();
   await sendSafe(chat, { text: lines.filter(Boolean).join('\n') });
 }
 
@@ -1268,21 +1304,33 @@ async function handleSavecon(msg, text) {
   }
   bulkRunning = true;
   const started = Date.now();
+  const saveResume = resumeLines('.savecon');
+  startJob({ command: '.savecon', total: list.length, chat });
   await sock.sendMessage(chat, {
-    text: `⏳ Enregistrement de *${list.length}* contact(s) BD (1 par 1, ${SAVE_DELAY_MS / 1000} s). Les déjà sauvés sont ignorés.`,
+    text: [
+      `⏳ Enregistrement de *${list.length}* contact(s) BD (1 par 1, ${SAVE_DELAY_MS / 1000} s). Les déjà sauvés sont ignorés.`,
+      ...saveResume,
+    ].filter(Boolean).join('\n'),
   });
   const ok = [];
   const fail = [];
+  let aborted = false;
+  const retries = new Map();
   try {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       const name = waContactName(c) || displayFrPhone(c.telephone);
+      touchCurrent(c, i + 1);
       if (!c.jid) {
+        markFail(c, 'JID invalide');
         fail.push({ ...c, error: 'JID invalide' });
         continue;
       }
       try {
-        if (!(await waitForWhatsApp(20000))) throw new Error('WhatsApp déconnecté');
+        if (!(await ensureWhatsAppOrPause(c, 20000))) {
+          aborted = true;
+          break;
+        }
         const lid = await lidForPhone(c.telephone);
         await sock.addOrEditContact(c.jid, {
           fullName: name,
@@ -1297,25 +1345,47 @@ async function handleSavecon(msg, text) {
           prenom: c.prenom,
           ville: c.ville,
         });
+        markOk(c);
         ok.push(c);
-        console.log(`[BOT] .savecon ${i + 1}/${list.length} ${name} ${c.telephone}`);
       } catch (e) {
         console.warn(`[BOT] .savecon ${c.telephone}:`, e.message);
+        if (isDisconnectError(e) || !waAlive()) {
+          if (!(await ensureWhatsAppOrPause(c, 45000))) {
+            aborted = true;
+            break;
+          }
+          const nTry = (retries.get(c.telephone) || 0) + 1;
+          retries.set(c.telephone, nTry);
+          if (nTry <= 2) {
+            i -= 1;
+            continue;
+          }
+        }
+        markFail(c, e.message);
         fail.push({ ...c, error: e.message });
       }
       if ((i + 1) % 50 === 0 || i === list.length - 1) {
         await sendSafe(chat, {
-          text: `📥 ${ok.length} sauvés / ${fail.length} échecs — ${i + 1}/${list.length}`,
+          text: `📥 ${ok.length} sauvés / ${fail.length} échecs — ${i + 1}/${list.length}\nDernier : ${contactLabel(c)}`,
         });
       }
       if (i < list.length - 1) {
         await sleep(SAVE_DELAY_MS);
-        if (!waAlive()) await waitForWhatsApp(45000);
+        if (!(await ensureWhatsAppOrPause(c, 45000))) {
+          aborted = true;
+          break;
+        }
       }
     }
   } finally {
     bulkRunning = false;
   }
+  if (aborted || loadJob().status === 'paused') {
+    markNotified();
+    await sendSafe(chat, { text: notifyPausedText() || '⚠️ WhatsApp coupé — retape `.savecon` pour reprendre.' });
+    return;
+  }
+  finishJob();
   const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
   const used = usedStats();
   await sendSafe(chat, {
@@ -1325,6 +1395,7 @@ async function handleSavecon(msg, text) {
         : `❌ *0/${list.length}* contact enregistré`,
       fail.length ? `❌ ${fail.length} échec(s) — ils seront retentés au prochain \`.savecon\`.` : '',
       `🔖 Marqueur *saved* : ${used.saved} au total. Ils ne seront plus repris.`,
+      ok.length ? `Dernier sauvé : ${contactLabel(ok[ok.length - 1])}` : '',
       '',
       'Ensuite : `.sendfull` pour envoyer le message David à ces contacts.',
     ].filter(Boolean).join('\n'),
@@ -1353,18 +1424,28 @@ async function handleSendfull(msg, text) {
   }
   bulkRunning = true;
   const started = Date.now();
+  const sendResume = resumeLines('.sendfull');
+  startJob({ command: '.sendfull', total: list.length, chat });
   await sock.sendMessage(chat, {
-    text: `⏳ Message David à *${list.length}* contact(s) sauvés, 1 par 1 (${ADD_DELAY_MS / 1000} s), avec le prénom…`,
+    text: [
+      `⏳ Message David à *${list.length}* contact(s) sauvés, 1 par 1 (${ADD_DELAY_MS / 1000} s), avec le prénom…`,
+      ...sendResume,
+    ].filter(Boolean).join('\n'),
   });
   const ok = [];
   const fail = [];
+  let aborted = false;
+  const retries = new Map();
   try {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       const body = seanceOfferteWhatsAppText(c);
-      console.log(`[BOT] .sendfull ${i + 1}/${list.length} ${waFirstName(c) || c.telephone}`);
+      touchCurrent(c, i + 1);
       try {
-        if (!(await waitForWhatsApp(45000))) throw new Error('WhatsApp déconnecté');
+        if (!(await ensureWhatsAppOrPause(c, 45000))) {
+          aborted = true;
+          break;
+        }
         await sock.sendMessage(c.jid, { text: body }, { linkPreview: false });
         markPhone(c.telephone, {
           status: 'wa_sent',
@@ -1372,24 +1453,47 @@ async function handleSendfull(msg, text) {
           prenom: c.prenom,
           ville: c.ville,
         });
+        markOk(c);
         ok.push(c);
       } catch (e) {
         console.warn(`[BOT] .sendfull ${c.telephone}:`, e.message);
+        if (isDisconnectError(e) || !waAlive()) {
+          if (!(await ensureWhatsAppOrPause(c, 45000))) {
+            aborted = true;
+            break;
+          }
+          const nTry = (retries.get(c.telephone) || 0) + 1;
+          retries.set(c.telephone, nTry);
+          if (nTry <= 2) {
+            i -= 1;
+            continue;
+          }
+        }
+        markFail(c, e.message);
         fail.push({ ...c, error: e.message });
       }
       if ((i + 1) % 25 === 0 || i === list.length - 1) {
         await sendSafe(chat, {
-          text: `📤 ${ok.length} envoyés / ${fail.length} échecs — ${i + 1}/${list.length}`,
+          text: `📤 ${ok.length} envoyés / ${fail.length} échecs — ${i + 1}/${list.length}\nDernier : ${contactLabel(c)}`,
         });
       }
       if (i < list.length - 1) {
         await sleep(ADD_DELAY_MS);
-        if (!waAlive()) await waitForWhatsApp(45000);
+        if (!(await ensureWhatsAppOrPause(c, 45000))) {
+          aborted = true;
+          break;
+        }
       }
     }
   } finally {
     bulkRunning = false;
   }
+  if (aborted || loadJob().status === 'paused') {
+    markNotified();
+    await sendSafe(chat, { text: notifyPausedText() || '⚠️ WhatsApp coupé — retape `.sendfull` pour reprendre.' });
+    return;
+  }
+  finishJob();
   const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
   const used = usedStats();
   await sendSafe(chat, {
@@ -1399,6 +1503,7 @@ async function handleSendfull(msg, text) {
         : `❌ *0/${list.length}* message envoyé`,
       fail.length ? `❌ ${fail.length} échec(s) — statut *saved* conservé, retente \`.sendfull\`.` : '',
       `📩 Déjà envoyés (marqueur) : *${used.waSent}*`,
+      ok.length ? `Dernier envoyé : ${contactLabel(ok[ok.length - 1])}` : '',
       `_Privé, personnalisé, pas de groupe._`,
     ].filter(Boolean).join('\n'),
   });
@@ -1495,6 +1600,19 @@ async function handleIncomingMessages(m) {
         continue;
       }
 
+      if (cmd === '.log') {
+        const logs = lastLogLines(18).map((l) => l.slice(-220));
+        await sock.sendMessage(chat, {
+          text: [
+            ...statsLines(),
+            '',
+            logs.length ? '*Derniers logs :*' : 'Aucun log de job.',
+            ...logs,
+          ].join('\n'),
+        });
+        continue;
+      }
+
       if (cmd === '.stats') {
         const pool = poolStats();
         const used = usedStats();
@@ -1510,6 +1628,8 @@ async function handleIncomingMessages(m) {
             `Pas sur WhatsApp : ${used.notWhatsapp}`,
             `Groupes suivis : ${used.groups}`,
             pool.mode === 'prod' ? `Dossier BD : ${pool.bdDir}` : `Pool test : ${pool.pool} numéros`,
+            '',
+            ...statsLines(),
           ].join('\n'),
         });
         continue;
@@ -1715,6 +1835,9 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         console.warn(
           `[BOT] close code=${statusCode} msg=${error?.message || ''} conflict=${conflict} restart=${restart}`
         );
+        if (bulkRunning || loadJob().status === 'running') {
+          logDisconnect(`connexion close code=${statusCode}`);
+        }
         await destroySocket();
         if (realLogout) {
           isLinking = false;
@@ -1738,6 +1861,16 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         reconnectAttempts = 0;
         cancelScheduledReconnect();
         console.log(`[BOT] .add mode=${modeLabel()} | admin=${MANDATORY_ADMIN_PHONE}`);
+        const paused = loadJob();
+        if (paused.status === 'paused' && paused.chat && !paused.notified) {
+          const note = notifyPausedText();
+          if (note) {
+            markNotified();
+            sendSafe(paused.chat, { text: note }).catch(() => {});
+          }
+        } else if (bulkRunning) {
+          logReconnect();
+        }
       }
     });
 
@@ -1779,6 +1912,7 @@ app.get('/api/status', (_req, res) => {
     addMode: modeLabel(),
     ...poolStats(),
     used: usedStats(),
+    job: loadJob(),
     authorizedPhones: getAllAuthorizedPhones(),
   });
 });
