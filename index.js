@@ -14,6 +14,7 @@ const {
   getContentType,
   downloadContentFromMessage,
   jidNormalizedUser,
+  ALL_WA_PATCH_NAMES,
 } = require('@whiskeysockets/baileys');
 
 require('dotenv').config({ path: path.join(__dirname, '.env') });
@@ -29,7 +30,7 @@ const {
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel, setAddMode } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir } = require('./lib/contacts');
+const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir, loadProdContacts } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -63,6 +64,12 @@ const {
   loadJob,
   contactLabel,
 } = require('./lib/job');
+const {
+  ingestContacts,
+  summarizeBook,
+  backfillSavedFromBook,
+  lastSavedMarker,
+} = require('./lib/wa-book');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -82,7 +89,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.savecon', '.sendtest', '.sendfull', '.log',
+  '.savecon', '.sendtest', '.sendfull', '.log', '.count',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -336,6 +343,7 @@ function menuText() {
     '`.sendfull` — message David aux contacts sauvés (reprend aussi)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
+    '`.count` — combien de contacts BD sont *sur le téléphone*',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés / reprise',
@@ -1347,6 +1355,7 @@ async function handleSavecon(msg, text) {
         });
         markOk(c);
         ok.push(c);
+        ingestWaContacts([{ id: c.jid, phoneNumber: c.telephone, name }]);
       } catch (e) {
         console.warn(`[BOT] .savecon ${c.telephone}:`, e.message);
         if (isDisconnectError(e) || !waAlive()) {
@@ -1555,6 +1564,63 @@ async function handleSendtest(msg) {
   await sendSafe(chat, { text: lines.join('\n') });
 }
 
+function resolveBookPhone(jid) {
+  const key = jidBare(jid);
+  if (key && lidPhoneCache.has(key)) return lidPhoneCache.get(key);
+  return '';
+}
+
+function ingestWaContacts(list) {
+  return ingestContacts(list, resolveBookPhone);
+}
+
+async function handleCount(msg) {
+  const chat = msg.key.remoteJid;
+  await sock.sendMessage(chat, {
+    text: '⏳ Je compte les contacts *sur le téléphone* (sync WhatsApp, ~10 s)…',
+  });
+  try {
+    if (typeof sock.resyncAppState === 'function') {
+      await sock.resyncAppState(ALL_WA_PATCH_NAMES, false);
+    }
+  } catch (e) {
+    console.warn('[BOT] resync carnet:', e.message);
+  }
+  await sleep(8000);
+  let prod = [];
+  try {
+    prod = loadProdContacts();
+  } catch (e) {
+    await sendSafe(chat, { text: '❌ BD introuvable : ' + e.message });
+    return;
+  }
+  const filled = backfillSavedFromBook(prod);
+  const s = summarizeBook(prod);
+  const last = lastSavedMarker();
+  const lastLine = last
+    ? `Dernier marqueur : ${[last.prenom, last.nom].filter(Boolean).join(' ') || ''} +${last.phone} (${last.status})`
+    : '';
+  await sendSafe(chat, {
+    text: [
+      '📱 *Carnet WhatsApp (téléphone)*',
+      `Contacts avec un nom (sauvés) : *${s.named}*`,
+      `Dont numéros de la BD : *${s.inBdNamed}* / ${s.bdSize}`,
+      s.synced ? `Fiches sync reçues : ${s.synced}` : 'Aucune fiche sync pour l’instant.',
+      '',
+      '🔖 *Marqueurs du bot*',
+      `Enregistrés (saved) : *${s.saved}*`,
+      `Messages déjà envoyés : *${s.waSent}*`,
+      `Total déjà traités : *${s.marked}*`,
+      lastLine,
+      filled ? `\n🔁 ${filled} numéro(s) trouvés sur le tel et marqués *saved* pour la reprise.` : '',
+      '',
+      s.inBdNamed || s.marked
+        ? `Prochain \`.savecon\` ignore les déjà marqués et continue après.`
+        : 'Carnet vide pour l’instant — laisse le bot connecté 1 min puis retape `.count`.',
+    ].filter(Boolean).join('\n'),
+  });
+}
+
 async function handleIncomingMessages(m) {
   if (m.type && m.type !== 'notify') return;
   if (!m.messages?.length) return;
@@ -1613,6 +1679,11 @@ async function handleIncomingMessages(m) {
         continue;
       }
 
+      if (cmd === '.count') {
+        await handleCount(msg);
+        continue;
+      }
+
       if (cmd === '.stats') {
         const pool = poolStats();
         const used = usedStats();
@@ -1630,6 +1701,8 @@ async function handleIncomingMessages(m) {
             pool.mode === 'prod' ? `Dossier BD : ${pool.bdDir}` : `Pool test : ${pool.pool} numéros`,
             '',
             ...statsLines(),
+            '',
+            '_Tape `.count` pour compter le carnet du téléphone._',
           ].join('\n'),
         });
         continue;
@@ -1871,6 +1944,11 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         } else if (bulkRunning) {
           logReconnect();
         }
+        setTimeout(() => {
+          sock?.resyncAppState?.(ALL_WA_PATCH_NAMES, false).catch((e) => {
+            console.warn('[BOT] resync carnet:', e.message);
+          });
+        }, 4000);
       }
     });
 
@@ -1884,6 +1962,15 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
       } else {
         Object.entries(update).forEach(([lid, pn]) => storeLidMapping(lid, pn));
       }
+    });
+    sock.ev.on('contacts.upsert', (list) => {
+      ingestWaContacts(list);
+    });
+    sock.ev.on('contacts.update', (list) => {
+      ingestWaContacts(list);
+    });
+    sock.ev.on('messaging-history.set', (payload) => {
+      if (payload?.contacts?.length) ingestWaContacts(payload.contacts);
     });
     sock.ev.on('messages.upsert', (m) => {
       handleIncomingMessages(m).catch((e) => console.error('[BOT] upsert:', e));

@@ -8,5 +8,6 @@ data/mode.json
 data/groups.json
 data/bot_config.json
 data/job.json
+data/wa-book.json
 data/auth_info_baileys/
 *.log
