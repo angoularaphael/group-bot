@@ -31,6 +31,7 @@ const { isTestAddMode, modeLabel } = require('./lib/mode');
 const { markPhone, unmarkPhone, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
 const { pickUnused, poolStats, displayName, reloadProdCache } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
+const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
   isAdminParticipant,
   parsePromotePhone,
@@ -116,10 +117,11 @@ function loadConfig() {
 loadConfig();
 
 function getAllAuthorizedPhones() {
-  const extra = (botConfig.authorizedPhones || [])
-    .map(normalizePhone)
-    .filter((p) => p && p !== MANDATORY_ADMIN_PHONE);
-  return [...new Set([MANDATORY_ADMIN_PHONE, ...extra].filter(Boolean))];
+  return authorizedPhonesList({
+    mandatoryPhone: MANDATORY_ADMIN_PHONE,
+    botPhone: botPhone(),
+    extraPhones: botConfig.authorizedPhones,
+  });
 }
 
 function storeLidMapping(lid, pn) {
@@ -162,9 +164,13 @@ function resolveSenderPhone(msg) {
 }
 
 function isSenderAuthorized(msg) {
-  const phone = resolveSenderPhone(msg);
-  if (!phone) return false;
-  return getAllAuthorizedPhones().includes(phone);
+  return isCommandAuthorized({
+    fromMe: Boolean(msg?.key?.fromMe),
+    senderPhone: resolveSenderPhone(msg),
+    botPhone: botPhone(),
+    extraPhones: botConfig.authorizedPhones,
+    mandatoryPhone: MANDATORY_ADMIN_PHONE,
+  });
 }
 
 function extractText(msg) {
@@ -1048,7 +1054,7 @@ async function handleIncomingMessages(m) {
         continue;
       }
 
-      const adminPhone = resolveSenderPhone(msg);
+      const adminPhone = resolveSenderPhone(msg) || botPhone();
       console.log(`[BOT] ${adminPhone}: ${clean}`);
 
       if (cmd === '.ping') {
