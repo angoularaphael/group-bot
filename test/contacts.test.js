@@ -13,17 +13,17 @@ process.env.ADD_MODE = 'test';
 const { testContacts, testNumbersLabel, TEST_NUMBERS } = require('../lib/contacts');
 const { markPhone, isBlocked, clearPhoneMarkers, loadUsed } = require('../lib/used');
 
-test('pool test inclut 0767919166 et 068498028', () => {
+test('pool test inclut 0767919166 et 0684698028', () => {
   const phones = TEST_NUMBERS.map((r) => r.telephone);
   assert.ok(phones.includes('0767919166'));
-  assert.ok(phones.includes('068498028'));
+  assert.ok(phones.includes('0684698028'));
   const contacts = testContacts();
   const tels = contacts.map((c) => c.telephone);
   assert.ok(tels.includes('33767919166'));
-  assert.ok(tels.includes('33684980280'));
+  assert.ok(tels.includes('33684698028'));
   assert.equal(contacts.length, 5);
   assert.match(testNumbersLabel(), /0767919166/);
-  assert.match(testNumbersLabel(), /0684980280/);
+  assert.match(testNumbersLabel(), /0684698028/);
 });
 
 test('clearPhoneMarkers débloque les numéros', () => {
