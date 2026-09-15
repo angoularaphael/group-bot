@@ -56,7 +56,7 @@ const CONFIG_FILE = process.env.BOT_CONFIG_FILE
   : dataFile('bot_config.json');
 const MANDATORY_ADMIN_PHONE = normalizePhone(process.env.MANDATORY_ADMIN_PHONE || '33762641473');
 const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
-const ADD_DELAY_MS = Math.max(400, parseInt(process.env.ADD_DELAY_MS || '4000', 10) || 4000);
+const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
@@ -81,7 +81,6 @@ let pairingCode = null;
 let qrError = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
-let logoutStrikes = 0;
 const lidPhoneCache = new Map();
 const lastGroupByAdmin = new Map();
 
@@ -225,6 +224,34 @@ function botJid() {
 
 function botPhone() {
   return normalizePhone(botJid());
+}
+
+function classifyDisconnect(error) {
+  const statusCode = error?.output?.statusCode;
+  const msg = String(error?.message || error || '');
+  const conflict = /conflict/i.test(msg);
+  const restart =
+    statusCode === DisconnectReason.restartRequired ||
+    statusCode === 515 ||
+    /restart required/i.test(msg);
+  const replaced =
+    statusCode === DisconnectReason.connectionReplaced ||
+    statusCode === 440 ||
+    conflict;
+  const realLogout =
+    statusCode === DisconnectReason.loggedOut &&
+    !conflict &&
+    !replaced &&
+    /logged out/i.test(msg);
+  return { statusCode, msg, conflict, restart, replaced, realLogout };
+}
+
+function isDisconnectError(err) {
+  const msg = String(err?.message || err || '');
+  return (
+    !sock ||
+    /déconnecté|null|conflict|restart required|connection closed|connection failure/i.test(msg)
+  );
 }
 
 function sleep(ms) {
@@ -439,11 +466,13 @@ async function sendGroupInvite(toJid, groupId, subject) {
 async function addParticipantsBatched(groupId, items) {
   const ok = [];
   const fail = [];
+  const retries = new Map();
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
+    console.log(`[BOT] .add ${i + 1}/${items.length} ${item.phone} (1 par 1, ${ADD_DELAY_MS / 1000}s)`);
     if (!waAlive()) {
-      console.warn('[BOT] WhatsApp coupé pendant .add — attente reconnexion…');
-      const recovered = await waitForWhatsApp(30000);
+      console.warn('[BOT] WhatsApp coupé — attente reconnexion avant le prochain ajout…');
+      const recovered = await waitForWhatsApp(45000);
       if (!recovered) {
         for (let j = i; j < items.length; j++) {
           fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
@@ -477,7 +506,17 @@ async function addParticipantsBatched(groupId, items) {
         break;
       } catch (e) {
         console.warn(`[BOT] add ${item.phone} via ${jid}:`, e.message);
-        if (/déconnecté|null/i.test(String(e.message)) || !sock) {
+        if (isDisconnectError(e) || !sock) {
+          console.warn('[BOT] coupure pendant l’ajout — on attend puis on reprend la même personne');
+          const recovered = await waitForWhatsApp(45000);
+          if (recovered) {
+            const nTry = (retries.get(item.phone) || 0) + 1;
+            retries.set(item.phone, nTry);
+            if (nTry <= 2) i -= 1;
+            else fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
+            done = true;
+            break;
+          }
           fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
           for (let j = i + 1; j < items.length; j++) {
             fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
@@ -507,7 +546,19 @@ async function addParticipantsBatched(groupId, items) {
     if (!done) {
       fail.push({ ...item, code: 400, error: 'bad-request' });
     }
-    await sleep(ADD_DELAY_MS);
+    if (i < items.length - 1 && i >= 0) {
+      await sleep(ADD_DELAY_MS);
+      if (!waAlive()) {
+        console.warn('[BOT] attente reconnexion avant la personne suivante…');
+        const recovered = await waitForWhatsApp(45000);
+        if (!recovered) {
+          for (let j = i + 1; j < items.length; j++) {
+            fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
+          }
+          break;
+        }
+      }
+    }
   }
   return { ok, fail };
 }
@@ -963,7 +1014,7 @@ async function handleAdd(msg, text, adminPhone) {
   }
 
   await sock.sendMessage(chat, {
-    text: `⏳ Mode *${mode}* — recherche de ${n} personne(s) (${available} dispo, ${members.phones.size} déjà dans le groupe)…`,
+    text: `⏳ Mode *${mode}* — ajout *1 par 1* (${n} pers., 3 s entre chaque)…`,
   });
 
   const subject = members.meta?.subject || (await groupSubject(groupId)) || 'groupe';
@@ -1409,27 +1460,22 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
       if (connection === 'close') {
         isConnected = false;
         const error = lastDisconnect?.error;
-        const statusCode = error?.output?.statusCode;
-        const loggedOut = statusCode === DisconnectReason.loggedOut;
-        console.warn(`[BOT] close code=${statusCode} msg=${error?.message || ''}`);
+        const { statusCode, conflict, restart, replaced, realLogout } = classifyDisconnect(error);
+        console.warn(
+          `[BOT] close code=${statusCode} msg=${error?.message || ''} conflict=${conflict} restart=${restart}`
+        );
         await destroySocket();
-        if (loggedOut) {
-          logoutStrikes += 1;
-          if (logoutStrikes >= 2) {
-            isLinking = false;
-            currentQrBase64 = null;
-            pairingCode = null;
-            reconnectAttempts = 0;
-            clearAuthSession();
-            console.log('[BOT] Session invalidée (401 répété). Rescanne le QR sur la page du bot.');
-            return;
-          }
-          console.warn('[BOT] Coupure 401 — reconnexion sans effacer la session');
-          scheduleReconnect(method, phoneNumber, 2500, { clearAuth: false });
+        if (realLogout) {
+          isLinking = false;
+          currentQrBase64 = null;
+          pairingCode = null;
+          reconnectAttempts = 0;
+          clearAuthSession();
+          console.log('[BOT] Session invalidée (logout réel). Rescanne le QR sur la page du bot.');
           return;
         }
-        logoutStrikes = 0;
-        const delay = statusCode === DisconnectReason.restartRequired ? 1500 : 5000;
+        const delay = restart ? 1500 : conflict || replaced ? 3000 : 5000;
+        console.warn('[BOT] Coupure temporaire — reconnexion sans effacer la session');
         scheduleReconnect(method, phoneNumber, delay, { clearAuth: false });
       } else if (connection === 'open') {
         console.log('[BOT] WhatsApp connecté');
@@ -1439,7 +1485,6 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         pairingCode = null;
         qrError = null;
         reconnectAttempts = 0;
-        logoutStrikes = 0;
         cancelScheduledReconnect();
         console.log(`[BOT] .add mode=${modeLabel()} | admin=${MANDATORY_ADMIN_PHONE}`);
       }
