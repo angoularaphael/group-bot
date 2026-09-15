@@ -16,9 +16,12 @@ test('prénom : Salut Marie, comme le mail David', () => {
   assert.ok(text.includes(SEANCE_OFFERTE_URL));
 });
 
-test('message WhatsApp : pas de tracking, pas de HTML, pas de promo criée', () => {
+test('lien tracké src=whatsapp, pas de HTML ni promo criée', () => {
   const text = seanceOfferteWhatsAppText({ prenom: 'camille', telephone: '33612345678' });
-  assert.doesNotMatch(text, /src=|utm_|html|<a /i);
+  assert.match(text, /src=whatsapp/);
+  assert.match(text, /utm_source=whatsapp/);
+  assert.ok(text.includes(SEANCE_OFFERTE_URL));
+  assert.doesNotMatch(text, /html|<a /i);
   assert.doesNotMatch(text, /GRATUIT|OFFRE LIMITÉE|clique ici|d’une valeur de 10/i);
   assert.doesNotMatch(text, /\*/);
 });
