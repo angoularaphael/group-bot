@@ -28,8 +28,8 @@ const {
   jidBare,
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel } = require('./lib/mode');
-const { markPhone, unmarkPhone, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, poolStats, displayName, reloadProdCache } = require('./lib/contacts');
+const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
+const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, testNumbersLabel } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -56,7 +56,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.kickall', '.promote',
+  '.kickall', '.promote', '.reset',
 ]);
 
 const app = express();
@@ -236,11 +236,12 @@ function menuText() {
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
+    '`.reset` — vider les marqueurs (numéros réutilisables pour `.add`)',
     '`.ping` — test',
     '',
     `📥 \`.add\` : mode *${mode}*`,
     mode === 'TEST'
-      ? '_Test : seulement 0762641473, 0744977766, 0774865543._'
+      ? `_Test : ${testNumbersLabel()}._`
       : '_Prod : bd triee, une personne = un seul groupe._',
   ].join('\n');
 }
@@ -989,7 +990,7 @@ async function handleAdd(msg, text, adminPhone) {
     `📥 Mode \`.add\` : *${mode}*`,
   ];
   if (isTestAddMode()) {
-    lines.push('_Numéros test : 0762641473 · 0744977766 · 0774865543_');
+    lines.push(`_Numéros test : ${testNumbersLabel()}_`);
   }
   if (addedContacts.length) {
     lines.push('', ...addedContacts.slice(0, 15).map((c, i) => `${i + 1}. ${displayName(c)} (${c.telephone})`));
@@ -1088,7 +1089,20 @@ async function handleIncomingMessages(m) {
             `Déjà ajoutés : ${used.added}`,
             `Pas sur WhatsApp : ${used.notWhatsapp}`,
             `Groupes suivis : ${used.groups}`,
-            pool.mode === 'prod' ? `Dossier BD : ${pool.bdDir}` : 'Pool test : 3 numéros',
+            pool.mode === 'prod' ? `Dossier BD : ${pool.bdDir}` : `Pool test : ${pool.pool} numéros`,
+          ].join('\n'),
+        });
+        continue;
+      }
+
+      if (cmd === '.reset') {
+        const n = clearPhoneMarkers();
+        const pool = poolStats();
+        await sock.sendMessage(chat, {
+          text: [
+            '♻️ *Marqueurs vidés*',
+            `${n} numéro(s) à nouveau utilisable(s) pour \`.add\`.`,
+            `Dispo : *${pool.available}* / ${pool.pool}`,
           ].join('\n'),
         });
         continue;
@@ -1359,8 +1373,15 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`[BOT] http://localhost:${PORT}`);
   console.log(`[BOT] .add mode=${modeLabel()}`);
   try {
-    const n = isTestAddMode() ? 3 : reloadProdCache();
-    console.log(`[BOT] pool ${modeLabel()}: ${n} numéros`);
+    if (isTestAddMode()) {
+      const cleared = clearPhoneMarkers();
+      console.log(`[BOT] marqueurs vidés: ${cleared}`);
+      const n = testContacts().length;
+      console.log(`[BOT] pool TEST: ${n} numéros (${testNumbersLabel()})`);
+    } else {
+      const n = reloadProdCache();
+      console.log(`[BOT] pool PROD: ${n} numéros`);
+    }
   } catch (e) {
     console.warn('[BOT] BD:', e.message);
   }
