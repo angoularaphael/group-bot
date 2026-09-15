@@ -56,7 +56,7 @@ const CONFIG_FILE = process.env.BOT_CONFIG_FILE
   : dataFile('bot_config.json');
 const MANDATORY_ADMIN_PHONE = normalizePhone(process.env.MANDATORY_ADMIN_PHONE || '33762641473');
 const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
-const ADD_DELAY_MS = Math.max(400, parseInt(process.env.ADD_DELAY_MS || '1800', 10) || 1800);
+const ADD_DELAY_MS = Math.max(400, parseInt(process.env.ADD_DELAY_MS || '4000', 10) || 4000);
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
@@ -81,6 +81,7 @@ let pairingCode = null;
 let qrError = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
+let logoutStrikes = 0;
 const lidPhoneCache = new Map();
 const lastGroupByAdmin = new Map();
 
@@ -228,6 +229,33 @@ function botPhone() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waAlive() {
+  return Boolean(sock && isConnected);
+}
+
+async function waitForWhatsApp(timeoutMs = 30000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (waAlive()) return true;
+    await sleep(500);
+  }
+  return waAlive();
+}
+
+async function sendSafe(jid, content) {
+  if (!(await waitForWhatsApp(20000))) {
+    console.warn('[BOT] send ignoré (WhatsApp coupé)');
+    return false;
+  }
+  try {
+    await sock.sendMessage(jid, content);
+    return true;
+  } catch (e) {
+    console.warn('[BOT] send:', e.message);
+    return false;
+  }
 }
 
 function menuText() {
@@ -383,6 +411,9 @@ async function phonesInGroup(groupId) {
 }
 
 async function sendGroupInvite(toJid, groupId, subject) {
+  if (!(await waitForWhatsApp(20000))) {
+    throw new Error('WhatsApp déconnecté');
+  }
   const code = await sock.groupInviteCode(groupId);
   if (!code) throw new Error('pas de code d’invitation');
   const expiration = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
@@ -408,11 +439,23 @@ async function sendGroupInvite(toJid, groupId, subject) {
 async function addParticipantsBatched(groupId, items) {
   const ok = [];
   const fail = [];
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!waAlive()) {
+      console.warn('[BOT] WhatsApp coupé pendant .add — attente reconnexion…');
+      const recovered = await waitForWhatsApp(30000);
+      if (!recovered) {
+        for (let j = i; j < items.length; j++) {
+          fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
+        }
+        break;
+      }
+    }
     const candidates = [...new Set((item.jids && item.jids.length ? item.jids : [item.jid, item.pnJid]).filter(Boolean).map(cleanJid))];
     let done = false;
     for (const jid of candidates) {
       try {
+        if (!waAlive()) throw new Error('WhatsApp déconnecté');
         console.log(`[BOT] add try ${item.phone} → ${jid}`);
         const result = await sock.groupParticipantsUpdate(groupId, [jid], 'add');
         const rows = Array.isArray(result) ? result : [];
@@ -434,6 +477,15 @@ async function addParticipantsBatched(groupId, items) {
         break;
       } catch (e) {
         console.warn(`[BOT] add ${item.phone} via ${jid}:`, e.message);
+        if (/déconnecté|null/i.test(String(e.message)) || !sock) {
+          fail.push({ ...item, jid, code: 503, error: 'WhatsApp déconnecté' });
+          for (let j = i + 1; j < items.length; j++) {
+            fail.push({ ...items[j], code: 503, error: 'WhatsApp déconnecté' });
+          }
+          done = true;
+          i = items.length;
+          break;
+        }
         if (isReachoutError(e)) {
           fail.push({ ...item, jid, code: 463, error: e.message });
           done = true;
@@ -970,10 +1022,14 @@ async function handleAdd(msg, text, adminPhone) {
     const { ok, fail } = await addParticipantsBatched(groupId, toAdd);
     await sleep(800);
     let verifiedPhones = skipAlready;
+    let verifiedFresh = false;
     try {
-      const fresh = await phonesInGroup(groupId);
-      verifiedPhones = fresh.phones;
-      members = fresh;
+      if (await waitForWhatsApp(15000)) {
+        const fresh = await phonesInGroup(groupId);
+        verifiedPhones = fresh.phones;
+        members = fresh;
+        verifiedFresh = true;
+      }
     } catch (e) {
       console.warn('[BOT] relecture membres:', e.message);
     }
@@ -981,7 +1037,9 @@ async function handleAdd(msg, text, adminPhone) {
     for (const row of ok) {
       const contact = row.contact;
       if (!contact) continue;
-      if (verifiedPhones.has(contact.telephone)) {
+      const inGroup = verifiedPhones.has(contact.telephone);
+      const trustWaOk = !verifiedFresh && isAddSuccess(row.code);
+      if (inGroup || trustWaOk) {
         if (addedContacts.length < n) {
           addedContacts.push(contact);
           skipAlready.add(contact.telephone);
@@ -1018,7 +1076,7 @@ async function handleAdd(msg, text, adminPhone) {
       }
       if (row.code === 463) {
         failed.push({ contact, code: 463, error: row.error });
-      } else if (shouldInviteAfterFail(row.code)) {
+      } else if (shouldInviteAfterFail(row.code) && waAlive()) {
         try {
           const link = await sendGroupInvite(row.pnJid || row.jid, groupId, subject);
           groupLink = groupLink || link;
@@ -1034,7 +1092,7 @@ async function handleAdd(msg, text, adminPhone) {
   }
 
   rememberLastGroup(adminPhone, groupId);
-  if (!groupLink) {
+  if (!groupLink && waAlive()) {
     try {
       const code = await sock.groupInviteCode(groupId);
       if (code) groupLink = `https://chat.whatsapp.com/${code}`;
@@ -1068,7 +1126,13 @@ async function handleAdd(msg, text, adminPhone) {
     );
   }
   if (notWa.length) lines.push('', `⚠️ ${notWa.length} numéro(s) pas sur WhatsApp (marqués, ignorés ensuite).`);
-  if (failed.some((f) => f.code === 463)) {
+  if (failed.some((f) => f.code === 503)) {
+    lines.push(
+      '',
+      '⚠️ WhatsApp a coupé la session pendant l’ajout. Le bot se reconnecte tout seul.',
+      leftover > 0 ? `Retape \`.add ${leftover}\` dans ce groupe pour continuer.` : ''
+    );
+  } else if (failed.some((f) => f.code === 463)) {
     lines.push(
       '',
       '❌ WhatsApp bloque l’ajout *direct* de nouveaux numéros (reach out).',
@@ -1098,7 +1162,7 @@ async function handleAdd(msg, text, adminPhone) {
   if (groupLink && (invited.length || failed.length)) {
     lines.push('', `🔗 ${groupLink}`);
   }
-  await sock.sendMessage(chat, { text: lines.join('\n') });
+  await sendSafe(chat, { text: lines.filter(Boolean).join('\n') });
 }
 
 async function handleIncomingMessages(m) {
@@ -1347,16 +1411,24 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         const error = lastDisconnect?.error;
         const statusCode = error?.output?.statusCode;
         const loggedOut = statusCode === DisconnectReason.loggedOut;
+        console.warn(`[BOT] close code=${statusCode} msg=${error?.message || ''}`);
         await destroySocket();
         if (loggedOut) {
-          isLinking = false;
-          currentQrBase64 = null;
-          pairingCode = null;
-          reconnectAttempts = 0;
-          clearAuthSession();
-          console.log('[BOT] Déconnecté (session). Relance npm start puis /api/start.');
+          logoutStrikes += 1;
+          if (logoutStrikes >= 2) {
+            isLinking = false;
+            currentQrBase64 = null;
+            pairingCode = null;
+            reconnectAttempts = 0;
+            clearAuthSession();
+            console.log('[BOT] Session invalidée (401 répété). Rescanne le QR sur la page du bot.');
+            return;
+          }
+          console.warn('[BOT] Coupure 401 — reconnexion sans effacer la session');
+          scheduleReconnect(method, phoneNumber, 2500, { clearAuth: false });
           return;
         }
+        logoutStrikes = 0;
         const delay = statusCode === DisconnectReason.restartRequired ? 1500 : 5000;
         scheduleReconnect(method, phoneNumber, delay, { clearAuth: false });
       } else if (connection === 'open') {
@@ -1367,6 +1439,7 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
         pairingCode = null;
         qrError = null;
         reconnectAttempts = 0;
+        logoutStrikes = 0;
         cancelScheduledReconnect();
         console.log(`[BOT] .add mode=${modeLabel()} | admin=${MANDATORY_ADMIN_PHONE}`);
       }
