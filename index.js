@@ -307,15 +307,40 @@ function matchAddRow(rows, requestedJid, phone) {
   return found || null;
 }
 
-async function resolveAddJid(phone) {
+function isBadRequestError(err) {
+  const msg = String(err?.message || err || '').toLowerCase();
+  const status = err?.output?.statusCode || err?.data;
+  return msg.includes('bad-request') || msg.includes('bad request') || status === 400 || status === '400';
+}
+
+function cleanJid(jid) {
+  if (!jid) return '';
+  try {
+    return jidNormalizedUser(jid) || jid;
+  } catch (e) {
+    return jid;
+  }
+}
+
+async function lidForPhone(phone) {
   const pn = phoneToJid(phone);
   try {
     const lid = await sock.signalRepository?.lidMapping?.getLIDForPN(pn);
-    if (lid) return lid;
+    return lid ? cleanJid(lid) : '';
   } catch (e) {
     console.warn('[BOT] getLIDForPN', phone, e.message);
+    return '';
   }
-  return pn;
+}
+
+async function jidCandidatesForAdd(phone) {
+  const pn = phoneToJid(phone);
+  const lid = await lidForPhone(phone);
+  const ordered = [];
+  // Ajouter avec le numéro (@s.whatsapp.net) : @lid seul → bad-request sur beaucoup de comptes.
+  if (pn) ordered.push(pn);
+  if (lid && lid !== pn) ordered.push(lid);
+  return ordered;
 }
 
 async function phonesInGroup(groupId) {
@@ -365,28 +390,48 @@ async function sendGroupInvite(toJid, groupId, subject) {
 async function addParticipantsBatched(groupId, items) {
   const ok = [];
   const fail = [];
-  for (let i = 0; i < items.length; i += ADD_BATCH) {
-    const batch = items.slice(i, i + ADD_BATCH);
-    const jids = batch.map((x) => x.jid);
-    try {
-      const result = await sock.groupParticipantsUpdate(groupId, jids, 'add');
-      const rows = Array.isArray(result) ? result : [];
-      console.log('[BOT] add raw', JSON.stringify(slimAddResult(result)));
-      for (let k = 0; k < batch.length; k++) {
-        const item = batch[k];
-        let row = matchAddRow(rows, item.jid, item.phone);
-        if (!row && rows.length === batch.length) row = rows[k];
+  for (const item of items) {
+    const candidates = [...new Set((item.jids && item.jids.length ? item.jids : [item.jid, item.pnJid]).filter(Boolean).map(cleanJid))];
+    let done = false;
+    for (const jid of candidates) {
+      try {
+        console.log(`[BOT] add try ${item.phone} → ${jid}`);
+        const result = await sock.groupParticipantsUpdate(groupId, [jid], 'add');
+        const rows = Array.isArray(result) ? result : [];
+        console.log('[BOT] add raw', JSON.stringify(slimAddResult(result)));
+        const row = matchAddRow(rows, jid, item.phone) || (rows.length === 1 ? rows[0] : null);
         const code = addStatusCode(row);
-        if (code === 200 || code === 409) ok.push({ ...item, code });
-        else fail.push({ ...item, code: code || 0, error: row ? `status ${code}` : 'pas de réponse WA' });
+        if (code === 200 || code === 409) {
+          ok.push({ ...item, jid, code });
+        } else {
+          fail.push({ ...item, jid, code: code || 0, error: row ? `status ${code}` : 'pas de réponse WA' });
+        }
+        done = true;
+        break;
+      } catch (e) {
+        console.warn(`[BOT] add ${item.phone} via ${jid}:`, e.message);
+        if (isReachoutError(e)) {
+          fail.push({ ...item, jid, code: 463, error: e.message });
+          done = true;
+          break;
+        }
+        if (isBadRequestError(e) && jid !== candidates[candidates.length - 1]) {
+          continue;
+        }
+        fail.push({
+          ...item,
+          jid,
+          code: isBadRequestError(e) ? 400 : 500,
+          error: e.message,
+        });
+        done = true;
+        break;
       }
-    } catch (e) {
-      console.warn('[BOT] add batch:', e.message);
-      const code = isReachoutError(e) ? 463 : 500;
-      for (const item of batch) fail.push({ ...item, code, error: e.message });
-      if (isReachoutError(e)) break;
     }
-    if (i + ADD_BATCH < items.length) await sleep(ADD_DELAY_MS);
+    if (!done) {
+      fail.push({ ...item, code: 400, error: 'bad-request' });
+    }
+    await sleep(ADD_DELAY_MS);
   }
   return { ok, fail };
 }
@@ -643,9 +688,10 @@ async function handleAdd(msg, text, adminPhone) {
       if (phone) existsByPhone.set(phone, row.exists !== false);
     }
 
+    const mePhone = botPhone();
     const toAdd = [];
     for (const contact of batch) {
-      if (skipAlready.has(contact.telephone)) {
+      if (skipAlready.has(contact.telephone) || contact.telephone === mePhone) {
         alreadyIn.push(contact);
         continue;
       }
@@ -659,8 +705,14 @@ async function handleAdd(msg, text, adminPhone) {
         });
         continue;
       }
-      const jid = await resolveAddJid(contact.telephone);
-      toAdd.push({ contact, jid, phone: contact.telephone, pnJid: phoneToJid(contact.telephone) });
+      const jids = await jidCandidatesForAdd(contact.telephone);
+      toAdd.push({
+        contact,
+        jid: jids[0],
+        jids,
+        phone: contact.telephone,
+        pnJid: phoneToJid(contact.telephone),
+      });
     }
     if (!toAdd.length) continue;
 
@@ -713,7 +765,7 @@ async function handleAdd(msg, text, adminPhone) {
         }
         continue;
       }
-      if (row.code === 403 || row.code === 401 || row.code === 0) {
+      if (row.code === 403 || row.code === 401 || row.code === 400 || row.code === 0 || row.code === 500) {
         try {
           const link = await sendGroupInvite(row.pnJid || row.jid, groupId, subject);
           groupLink = groupLink || link;
