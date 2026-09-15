@@ -62,6 +62,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
+  '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
 
@@ -238,6 +239,8 @@ function menuText() {
     '`.pp` — répondre à une photo (ou légende) pour la photo de profil du *bot*',
     '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
     '`.mname Nouveau nom` — changer le nom du *groupe*',
+    '`.mute` — seuls les *admins* peuvent écrire',
+    '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
@@ -638,6 +641,45 @@ async function handleMname(msg, text, adminPhone) {
     text: previous && previous !== name
       ? `✅ Groupe renommé : *${previous}* → *${name}*`
       : `✅ Nom du groupe : *${name}*`,
+  });
+}
+
+async function handleMute(msg, adminPhone, mute) {
+  const chat = msg.key.remoteJid;
+  const cmd = mute ? '.mute' : '.unmute';
+  const groupId = resolveTargetGroup(msg, adminPhone);
+  if (!groupId || !isGroupJid(groupId)) {
+    await sock.sendMessage(chat, { text: `❌ \`${cmd}\` s’utilise *dans le groupe*.` });
+    return;
+  }
+  let meta;
+  try {
+    meta = await sock.groupMetadata(groupId);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Impossible de lire le groupe : ' + e.message });
+    return;
+  }
+  if (!botIsGroupAdmin(meta)) {
+    await sock.sendMessage(chat, {
+      text: `❌ Le bot n’est pas *admin* du groupe. Nomme-le admin, puis retape \`${cmd}\`.`,
+    });
+    return;
+  }
+  const already = !!meta.announce;
+  if (mute && already) {
+    await sock.sendMessage(chat, { text: '🔇 Déjà en sourdine : seuls les *admins* peuvent écrire.' });
+    return;
+  }
+  if (!mute && !already) {
+    await sock.sendMessage(chat, { text: '🔊 Tout le monde peut déjà écrire.' });
+    return;
+  }
+  await sock.groupSettingUpdate(groupId, mute ? 'announcement' : 'not_announcement');
+  const subject = meta.subject || 'groupe';
+  await sock.sendMessage(chat, {
+    text: mute
+      ? `🔇 *${subject}* : seuls les *admins* peuvent écrire.`
+      : `🔊 *${subject}* : tout le monde peut écrire.`,
   });
 }
 
@@ -1152,6 +1194,16 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.mname') {
         await handleMname(msg, clean, adminPhone);
+        continue;
+      }
+
+      if (cmd === '.mute') {
+        await handleMute(msg, adminPhone, true);
+        continue;
+      }
+
+      if (cmd === '.unmute') {
+        await handleMute(msg, adminPhone, false);
         continue;
       }
 
