@@ -29,7 +29,7 @@ const {
   jidBare,
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel, setAddMode } = require('./lib/mode');
-const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
+const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats, applySeedSaved } = require('./lib/used');
 const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir, loadProdContacts } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
@@ -101,6 +101,7 @@ app.use(express.json());
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 dataDir();
 setAddMode('prod');
+applySeedSaved();
 
 let sock = null;
 let isConnected = false;

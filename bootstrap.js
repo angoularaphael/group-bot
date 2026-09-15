@@ -219,6 +219,14 @@ function syncBdFromRepo() {
   console.log(`[group-bot bootstrap] ${n} fichier(s) BD copiés vers ${BD_DIR}`);
 }
 
+function syncSeedFromRepo() {
+  const from = path.join(APP_DIR, 'data', 'seed-saved.json');
+  if (!fs.existsSync(from)) return;
+  const to = path.join(DATA_DIR, 'seed-saved.json');
+  fs.copyFileSync(from, to);
+  console.log(`[group-bot bootstrap] seed-saved.json copié vers ${to}`);
+}
+
 loadRootEnv();
 const BOT_PORT = resolvePort();
 process.env.PORT = BOT_PORT;
@@ -263,6 +271,7 @@ try {
 cloneOrUpdate();
 syncEnv(BOT_PORT);
 syncBdFromRepo();
+syncSeedFromRepo();
 
 if (!fs.existsSync(path.join(APP_DIR, 'index.js'))) {
   console.error('[group-bot bootstrap] index.js introuvable après clone');

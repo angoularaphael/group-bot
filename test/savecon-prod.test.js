@@ -15,7 +15,7 @@ for (const rel of ['../lib/paths', '../lib/used', '../lib/mode', '../lib/contact
   delete require.cache[id];
 }
 
-const { markPhone, isContactSaved, isWaSent, stats } = require('../lib/used');
+const { markPhone, isContactSaved, isWaSent, stats, applySeedSaved } = require('../lib/used');
 const { pickUnsaved, pickSavedUnsent, loadProdContacts } = require('../lib/contacts');
 
 test('un contact sauvé n’est plus repris par .savecon', () => {
@@ -45,4 +45,15 @@ test('.sendfull cible uniquement les saved, pas les déjà envoyés', () => {
   const s = stats();
   assert.ok(s.saved >= 1);
   assert.ok(s.waSent >= 1);
+});
+
+test('seed Tiphaine : .savecon reprend après #2103', () => {
+  process.env.SEED_SAVED_FILE = path.join(__dirname, '..', 'data', 'seed-saved.json');
+  const added = applySeedSaved();
+  assert.ok(added >= 1);
+  assert.equal(isContactSaved('33781840620'), true);
+  const batch = pickUnsaved(1);
+  assert.ok(batch.length);
+  assert.equal(batch[0].telephone, '33783482626');
+  assert.match(`${batch[0].prenom} ${batch[0].nom}`, /G[ée]rard Philippe/i);
 });
