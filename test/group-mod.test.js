@@ -18,6 +18,7 @@ test('.kickall et .promote sont dans le menu et les commandes', () => {
   assert.match(src, /handleKickall/);
   assert.match(src, /handlePromote/);
   assert.match(src, /groupParticipantsUpdate\(groupId, batch, 'remove'\)/);
+  assert.match(src, /groupLeave\(groupId\)/);
   assert.match(src, /groupParticipantsUpdate\(groupId, toPromote, 'promote'\)/);
 });
 

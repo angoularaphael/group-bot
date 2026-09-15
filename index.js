@@ -233,7 +233,7 @@ function menuText() {
     '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
     '`.mname Nouveau nom` — changer le nom du *groupe*',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
-    '`.kickall` — retirer tous les *non-admins* du groupe',
+    '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
     '`.ping` — test',
@@ -701,8 +701,9 @@ async function handleKickall(msg, adminPhone) {
   const admins = (meta.participants || []).filter(isAdminParticipant).length;
   if (!targets.length) {
     await sock.sendMessage(chat, {
-      text: `✅ Personne à retirer — ${admins} admin(s) seulement.`,
+      text: `✅ Personne à retirer — ${admins} admin(s) seulement. Le bot quitte le groupe.`,
     });
+    await leaveGroupAfterKickall(groupId);
     return;
   }
   await sock.sendMessage(chat, {
@@ -722,9 +723,20 @@ async function handleKickall(msg, adminPhone) {
   }
   await sock.sendMessage(chat, {
     text: failed
-      ? `✅ ${removed} retiré(s), ${failed} échec(s). Admins intacts.`
-      : `✅ Groupe vidé des non-admins : *${removed}* retiré(s).`,
+      ? `✅ ${removed} retiré(s), ${failed} échec(s). Admins intacts. Le bot quitte.`
+      : `✅ Groupe vidé des non-admins : *${removed}* retiré(s). Le bot quitte.`,
   });
+  await leaveGroupAfterKickall(groupId);
+}
+
+async function leaveGroupAfterKickall(groupId) {
+  await sleep(800);
+  try {
+    await sock.groupLeave(groupId);
+    console.log('[BOT] kickall → groupLeave', groupId);
+  } catch (e) {
+    console.warn('[BOT] groupLeave:', e.message);
+  }
 }
 
 async function handlePromote(msg, text, adminPhone) {
