@@ -18,10 +18,12 @@ test('.kickall et .promote sont dans le menu et les commandes', () => {
   assert.match(src, /'\.reset'/);
   assert.match(src, /'\.savecon'/);
   assert.match(src, /'\.sendtest'/);
+  assert.match(src, /'\.sendfull'/);
   assert.match(src, /handleKickall/);
   assert.match(src, /handlePromote/);
   assert.match(src, /handleSavecon/);
   assert.match(src, /handleSendtest/);
+  assert.match(src, /handleSendfull/);
   assert.match(src, /groupParticipantsUpdate\(groupId, batch, 'remove'\)/);
   assert.match(src, /groupLeave\(groupId\)/);
   assert.match(src, /groupParticipantsUpdate\(groupId, toPromote, 'promote'\)/);

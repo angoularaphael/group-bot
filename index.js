@@ -27,9 +27,9 @@ const {
   isLidJid,
   jidBare,
 } = require('./lib/phones');
-const { isTestAddMode, modeLabel } = require('./lib/mode');
+const { isTestAddMode, modeLabel, setAddMode } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
-const { pickUnused, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
+const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -45,7 +45,7 @@ const {
   shouldTryNextJid,
   shouldInviteAfterFail,
 } = require('./lib/add-status');
-const { seanceOfferteWhatsAppText, waFirstName } = require('./lib/david-wa');
+const { seanceOfferteWhatsAppText, waFirstName, waContactName } = require('./lib/david-wa');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -58,12 +58,14 @@ const CONFIG_FILE = process.env.BOT_CONFIG_FILE
 const MANDATORY_ADMIN_PHONE = normalizePhone(process.env.MANDATORY_ADMIN_PHONE || '33762641473');
 const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
 const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
+const SAVE_BATCH = Math.max(1, parseInt(process.env.SAVE_BATCH || '3000', 10) || 3000);
+const SAVE_DELAY_MS = Math.max(400, parseInt(process.env.SAVE_DELAY_MS || '800', 10) || 800);
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.savecon', '.sendtest',
+  '.savecon', '.sendtest', '.sendfull',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -74,10 +76,12 @@ app.use(express.json());
 
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 dataDir();
+setAddMode('prod');
 
 let sock = null;
 let isConnected = false;
 let isLinking = false;
+let bulkRunning = false;
 let currentQrBase64 = null;
 let pairingCode = null;
 let qrError = null;
@@ -299,8 +303,9 @@ function menuText() {
     '`.mute` — seuls les *admins* peuvent écrire',
     '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
-    '`.savecon` — enregistrer les numéros test dans les contacts WhatsApp (`test1`…)',
-    '`.sendtest` — message David séance offerte, en privé, avec le prénom',
+    '`.savecon` — enregistrer *3000* contacts de la BD (marque ceux déjà sauvés)',
+    '`.sendfull` — message David aux *3000* contacts déjà enregistrés',
+    '`.sendtest` — message David aux 5 numéros test',
     '`.kickall` — retirer tous les *non-admins* du groupe, puis le bot sort',
     '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
@@ -383,6 +388,7 @@ function matchAddRow(rows, requestedJid, phone) {
   });
   return found || null;
 }
+
 
 function isBadRequestError(err) {
   const msg = String(err?.message || err || '').toLowerCase();
@@ -1232,67 +1238,170 @@ function testVcard(label, phone) {
   ].join('\n');
 }
 
-async function handleSavecon(msg) {
+function parseJobCount(text, cmd, fallback = SAVE_BATCH) {
+  const m = String(text || '').trim().match(new RegExp(`^\\.${cmd}\\s+(\\d+)`, 'i'));
+  if (!m) return fallback;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, SAVE_BATCH);
+}
+
+async function handleSavecon(msg, text) {
   const chat = msg.key.remoteJid;
-  const list = labeledTestContacts();
-  if (!list.length) {
-    await sock.sendMessage(chat, { text: '❌ Aucun numéro test à enregistrer.' });
+  if (bulkRunning) {
+    await sock.sendMessage(chat, { text: '⏳ Un envoi / enregistrement est déjà en cours. Attends la fin.' });
     return;
   }
+  const want = parseJobCount(text, 'savecon', SAVE_BATCH);
+  let list;
+  try {
+    list = isTestAddMode() ? labeledTestContacts() : pickUnsaved(want);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ BD introuvable : ' + e.message });
+    return;
+  }
+  if (!list.length) {
+    await sock.sendMessage(chat, {
+      text: 'ℹ️ Plus personne à enregistrer — tous les numéros de la base ont déjà le marqueur `.savecon`.',
+    });
+    return;
+  }
+  bulkRunning = true;
+  const started = Date.now();
   await sock.sendMessage(chat, {
-    text: `⏳ Enregistrement de ${list.length} contact(s) WhatsApp (*test1* … *test${list.length}*)…`,
+    text: `⏳ Enregistrement de *${list.length}* contact(s) BD (1 par 1, ${SAVE_DELAY_MS / 1000} s). Les déjà sauvés sont ignorés.`,
   });
   const ok = [];
   const fail = [];
-  for (const c of list) {
-    if (!c.jid) {
-      fail.push({ ...c, error: 'JID invalide' });
-      continue;
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const name = waContactName(c) || displayFrPhone(c.telephone);
+      if (!c.jid) {
+        fail.push({ ...c, error: 'JID invalide' });
+        continue;
+      }
+      try {
+        if (!(await waitForWhatsApp(20000))) throw new Error('WhatsApp déconnecté');
+        const lid = await lidForPhone(c.telephone);
+        await sock.addOrEditContact(c.jid, {
+          fullName: name,
+          firstName: waFirstName(c) || name,
+          pnJid: c.jid,
+          ...(lid ? { lidJid: lid } : {}),
+          saveOnPrimaryAddressbook: true,
+        });
+        markPhone(c.telephone, {
+          status: 'saved',
+          nom: c.nom,
+          prenom: c.prenom,
+          ville: c.ville,
+        });
+        ok.push(c);
+        console.log(`[BOT] .savecon ${i + 1}/${list.length} ${name} ${c.telephone}`);
+      } catch (e) {
+        console.warn(`[BOT] .savecon ${c.telephone}:`, e.message);
+        fail.push({ ...c, error: e.message });
+      }
+      if ((i + 1) % 50 === 0 || i === list.length - 1) {
+        await sendSafe(chat, {
+          text: `📥 ${ok.length} sauvés / ${fail.length} échecs — ${i + 1}/${list.length}`,
+        });
+      }
+      if (i < list.length - 1) {
+        await sleep(SAVE_DELAY_MS);
+        if (!waAlive()) await waitForWhatsApp(45000);
+      }
     }
-    try {
-      if (!(await waitForWhatsApp(20000))) throw new Error('WhatsApp déconnecté');
-      const lid = await lidForPhone(c.telephone);
-      await sock.addOrEditContact(c.jid, {
-        fullName: c.label,
-        firstName: c.label,
-        pnJid: c.jid,
-        ...(lid ? { lidJid: lid } : {}),
-        saveOnPrimaryAddressbook: true,
-      });
-      ok.push(c);
-      console.log(`[BOT] .savecon ${c.label} ${c.telephone}`);
-    } catch (e) {
-      console.warn(`[BOT] .savecon ${c.label}:`, e.message);
-      fail.push({ ...c, error: e.message });
+  } finally {
+    bulkRunning = false;
+  }
+  const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
+  const used = usedStats();
+  await sendSafe(chat, {
+    text: [
+      ok.length
+        ? `✅ *${ok.length}/${list.length}* contact(s) enregistrés (${mins} min)`
+        : `❌ *0/${list.length}* contact enregistré`,
+      fail.length ? `❌ ${fail.length} échec(s) — ils seront retentés au prochain \`.savecon\`.` : '',
+      `🔖 Marqueur *saved* : ${used.saved} au total. Ils ne seront plus repris.`,
+      '',
+      'Ensuite : `.sendfull` pour envoyer le message David à ces contacts.',
+    ].filter(Boolean).join('\n'),
+  });
+}
+
+async function handleSendfull(msg, text) {
+  const chat = msg.key.remoteJid;
+  if (bulkRunning) {
+    await sock.sendMessage(chat, { text: '⏳ Un envoi / enregistrement est déjà en cours. Attends la fin.' });
+    return;
+  }
+  const want = parseJobCount(text, 'sendfull', SAVE_BATCH);
+  let list;
+  try {
+    list = pickSavedUnsent(want);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ BD introuvable : ' + e.message });
+    return;
+  }
+  if (!list.length) {
+    await sock.sendMessage(chat, {
+      text: 'ℹ️ Aucun contact *saved* en attente. Lance d’abord `.savecon`.',
+    });
+    return;
+  }
+  bulkRunning = true;
+  const started = Date.now();
+  await sock.sendMessage(chat, {
+    text: `⏳ Message David à *${list.length}* contact(s) sauvés, 1 par 1 (${ADD_DELAY_MS / 1000} s), avec le prénom…`,
+  });
+  const ok = [];
+  const fail = [];
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const body = seanceOfferteWhatsAppText(c);
+      console.log(`[BOT] .sendfull ${i + 1}/${list.length} ${waFirstName(c) || c.telephone}`);
+      try {
+        if (!(await waitForWhatsApp(45000))) throw new Error('WhatsApp déconnecté');
+        await sock.sendMessage(c.jid, { text: body }, { linkPreview: false });
+        markPhone(c.telephone, {
+          status: 'wa_sent',
+          nom: c.nom,
+          prenom: c.prenom,
+          ville: c.ville,
+        });
+        ok.push(c);
+      } catch (e) {
+        console.warn(`[BOT] .sendfull ${c.telephone}:`, e.message);
+        fail.push({ ...c, error: e.message });
+      }
+      if ((i + 1) % 25 === 0 || i === list.length - 1) {
+        await sendSafe(chat, {
+          text: `📤 ${ok.length} envoyés / ${fail.length} échecs — ${i + 1}/${list.length}`,
+        });
+      }
+      if (i < list.length - 1) {
+        await sleep(ADD_DELAY_MS);
+        if (!waAlive()) await waitForWhatsApp(45000);
+      }
     }
-    await sleep(800);
+  } finally {
+    bulkRunning = false;
   }
-  const lines = [
-    ok.length
-      ? `✅ *${ok.length}/${list.length}* contact(s) enregistré(s) sur WhatsApp`
-      : `❌ *0/${list.length}* contact enregistré`,
-    '',
-    ...list.map((c) => {
-      const mark = ok.some((x) => x.telephone === c.telephone) ? '✅' : '❌';
-      return `${mark} *${c.label}* — ${displayFrPhone(c.telephone)}`;
-    }),
-  ];
-  if (fail.length) {
-    lines.push('', '_Si un nom n’apparaît pas, ouvre la carte contact ci-dessous et tape Ajouter._');
-  }
-  await sock.sendMessage(chat, { text: lines.join('\n') });
-  if (fail.length) {
-    try {
-      await sock.sendMessage(chat, {
-        contacts: {
-          displayName: fail.map((c) => c.label).join(', '),
-          contacts: fail.map((c) => ({ vcard: testVcard(c.label, c.telephone), displayName: c.label })),
-        },
-      });
-    } catch (e) {
-      console.warn('[BOT] .savecon vcard:', e.message);
-    }
-  }
+  const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
+  const used = usedStats();
+  await sendSafe(chat, {
+    text: [
+      ok.length
+        ? `✅ *${ok.length}/${list.length}* messages David envoyés (${mins} min)`
+        : `❌ *0/${list.length}* message envoyé`,
+      fail.length ? `❌ ${fail.length} échec(s) — statut *saved* conservé, retente \`.sendfull\`.` : '',
+      `📩 Déjà envoyés (marqueur) : *${used.waSent}*`,
+      `_Privé, personnalisé, pas de groupe._`,
+    ].filter(Boolean).join('\n'),
+  });
 }
 
 async function handleSendtest(msg) {
@@ -1395,7 +1504,9 @@ async function handleIncomingMessages(m) {
             `Mode .add : *${modeLabel()}*`,
             `Base : ${pool.pool} numéros`,
             `Dispo (pas encore dans un groupe) : *${pool.available}*`,
-            `Déjà ajoutés : ${used.added}`,
+            `Déjà ajoutés (groupe) : ${used.added}`,
+            `Contacts WhatsApp sauvés : ${used.saved}`,
+            `Messages David envoyés : ${used.waSent}`,
             `Pas sur WhatsApp : ${used.notWhatsapp}`,
             `Groupes suivis : ${used.groups}`,
             pool.mode === 'prod' ? `Dossier BD : ${pool.bdDir}` : `Pool test : ${pool.pool} numéros`,
@@ -1453,12 +1564,17 @@ async function handleIncomingMessages(m) {
       }
 
       if (cmd === '.savecon') {
-        await handleSavecon(msg);
+        await handleSavecon(msg, clean);
         continue;
       }
 
       if (cmd === '.sendtest') {
         await handleSendtest(msg);
+        continue;
+      }
+
+      if (cmd === '.sendfull') {
+        await handleSendfull(msg, clean);
         continue;
       }
 
@@ -1703,7 +1819,7 @@ app.post('/api/logout', async (_req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[BOT] QR : http://${PUBLIC_HOST}:${PORT}`);
   console.log(`[BOT] http://localhost:${PORT}`);
-  console.log(`[BOT] .add mode=${modeLabel()}`);
+  console.log(`[BOT] .add mode=${modeLabel()} | .savecon ${SAVE_BATCH} | .sendfull`);
   try {
     if (isTestAddMode()) {
       const cleared = clearPhoneMarkers();
