@@ -31,6 +31,13 @@ const { isTestAddMode, modeLabel } = require('./lib/mode');
 const { markPhone, unmarkPhone, loadUsed, rememberGroup, stats: usedStats } = require('./lib/used');
 const { pickUnused, poolStats, displayName, reloadProdCache } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
+const {
+  isAdminParticipant,
+  parsePromotePhone,
+  samePerson,
+  kickTargets,
+  chunk,
+} = require('./lib/group-mod');
 
 const PORT = parseInt(process.env.PORT || process.env.SERVER_PORT || '21774', 10) || 21774;
 const PUBLIC_HOST = String(process.env.BOT_PUBLIC_HOST || 'prem-eu2.bot-hosting.net').trim();
@@ -48,6 +55,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
+  '.kickall', '.promote',
 ]);
 
 const app = express();
@@ -219,6 +227,8 @@ function menuText() {
     '`.gpp` — répondre à une photo *dans le groupe* pour la photo du *groupe*',
     '`.mname Nouveau nom` — changer le nom du *groupe*',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
+    '`.kickall` — retirer tous les *non-admins* du groupe',
+    '`.promote` — nommer admin (réponds à un message, mention, ou `.promote 06…`)',
     '`.stats` — restants / déjà utilisés',
     '`.ping` — test',
     '',
@@ -536,6 +546,8 @@ async function handleCgroup(msg, text, adminPhone) {
     '',
     'Ensuite, *dans ce groupe* :',
     '`.add 25` — nombre de personnes à ajouter',
+    '`.kickall` — vider les non-admins',
+    '`.promote` — nommer un admin',
   ];
   if (link) lines.push('', `🔗 ${link}`);
   await sock.sendMessage(chat, { text: lines.join('\n') });
@@ -615,6 +627,167 @@ async function handleMname(msg, text, adminPhone) {
     text: previous && previous !== name
       ? `✅ Groupe renommé : *${previous}* → *${name}*`
       : `✅ Nom du groupe : *${name}*`,
+  });
+}
+
+function mentionedJids(msg) {
+  const raw = contextInfo(msg)?.mentionedJid;
+  return Array.isArray(raw) ? raw.map(cleanJid).filter(Boolean) : [];
+}
+
+function quotedParticipantJid(msg) {
+  const ctx = contextInfo(msg);
+  return cleanJid(ctx?.participant || ctx?.quotedMessage?.key?.participant || '');
+}
+
+function botIsGroupAdmin(meta) {
+  const me = botJid();
+  const mePhone = botPhone();
+  return (meta?.participants || []).some((p) => {
+    if (!isAdminParticipant(p)) return false;
+    if (samePerson(p.id, me)) return true;
+    if (p.phoneNumber && normalizePhone(p.phoneNumber) === mePhone) return true;
+    if (isPnJid(p.id) && normalizePhone(p.id) === mePhone) return true;
+    return false;
+  });
+}
+
+function participantJidForPhone(meta, phone) {
+  const want = normalizePhone(phone);
+  if (!want) return '';
+  for (const p of meta?.participants || []) {
+    if (p.phoneNumber && normalizePhone(p.phoneNumber) === want) return cleanJid(p.id);
+    if (p.id && isPnJid(p.id) && normalizePhone(p.id) === want) return cleanJid(p.id);
+  }
+  return '';
+}
+
+async function handleKickall(msg, adminPhone) {
+  const chat = msg.key.remoteJid;
+  const groupId = resolveTargetGroup(msg, adminPhone);
+  if (!groupId || !isGroupJid(groupId) || !isGroupJid(chat)) {
+    await sock.sendMessage(chat, { text: '❌ `.kickall` s’utilise *dans le groupe*.' });
+    return;
+  }
+  let meta;
+  try {
+    meta = await sock.groupMetadata(groupId);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Impossible de lire le groupe : ' + e.message });
+    return;
+  }
+  if (!botIsGroupAdmin(meta)) {
+    await sock.sendMessage(chat, {
+      text: '❌ Le bot n’est pas *admin* du groupe. Nomme-le admin, puis retape `.kickall`.',
+    });
+    return;
+  }
+  const senderKeep = [
+    msg.key.participant,
+    msg.key.participantAlt,
+    senderJidForGroup(msg, adminPhone),
+    phoneToJid(adminPhone),
+  ].filter(Boolean);
+  const targets = kickTargets(meta.participants, {
+    botJid: botJid(),
+    senderJids: senderKeep,
+  });
+  const admins = (meta.participants || []).filter(isAdminParticipant).length;
+  if (!targets.length) {
+    await sock.sendMessage(chat, {
+      text: `✅ Personne à retirer — ${admins} admin(s) seulement.`,
+    });
+    return;
+  }
+  await sock.sendMessage(chat, {
+    text: `⏳ Retrait de ${targets.length} non-admin(s) (${admins} admin(s) conservé(s))…`,
+  });
+  let removed = 0;
+  let failed = 0;
+  for (const batch of chunk(targets, ADD_BATCH)) {
+    try {
+      await sock.groupParticipantsUpdate(groupId, batch, 'remove');
+      removed += batch.length;
+    } catch (e) {
+      console.warn('[BOT] kickall:', e.message);
+      failed += batch.length;
+    }
+    await sleep(ADD_DELAY_MS);
+  }
+  await sock.sendMessage(chat, {
+    text: failed
+      ? `✅ ${removed} retiré(s), ${failed} échec(s). Admins intacts.`
+      : `✅ Groupe vidé des non-admins : *${removed}* retiré(s).`,
+  });
+}
+
+async function handlePromote(msg, text, adminPhone) {
+  const chat = msg.key.remoteJid;
+  const groupId = resolveTargetGroup(msg, adminPhone);
+  if (!groupId || !isGroupJid(groupId) || !isGroupJid(chat)) {
+    await sock.sendMessage(chat, {
+      text: '❌ `.promote` s’utilise *dans le groupe*.\nRéponds au message, mentionne la personne, ou `.promote 06…`.',
+    });
+    return;
+  }
+  let meta;
+  try {
+    meta = await sock.groupMetadata(groupId);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Impossible de lire le groupe : ' + e.message });
+    return;
+  }
+  if (!botIsGroupAdmin(meta)) {
+    await sock.sendMessage(chat, {
+      text: '❌ Le bot n’est pas *admin* du groupe. Nomme-le admin, puis retape `.promote`.',
+    });
+    return;
+  }
+
+  const candidates = [];
+  for (const jid of mentionedJids(msg)) candidates.push(jid);
+  const quoted = quotedParticipantJid(msg);
+  if (quoted) candidates.push(quoted);
+  const phone = parsePromotePhone(text);
+  if (phone) {
+    const inGroup = participantJidForPhone(meta, phone);
+    if (inGroup) candidates.push(inGroup);
+    else {
+      const extra = await jidCandidatesForAdd(phone);
+      candidates.push(...extra);
+    }
+  }
+  const unique = [...new Set(candidates.map(cleanJid).filter(Boolean))];
+  if (!unique.length) {
+    await sock.sendMessage(chat, {
+      text: '❌ Qui nommer admin ? Réponds à son message, mentionne-le, ou `.promote 0612345678`.',
+    });
+    return;
+  }
+
+  const already = [];
+  const toPromote = [];
+  for (const jid of unique) {
+    const p = (meta.participants || []).find((row) => samePerson(row.id, jid));
+    if (p && isAdminParticipant(p)) already.push(jid);
+    else toPromote.push(jid);
+  }
+  if (!toPromote.length) {
+    await sock.sendMessage(chat, { text: 'ℹ️ Cette personne est déjà admin.' });
+    return;
+  }
+
+  try {
+    await sock.groupParticipantsUpdate(groupId, toPromote, 'promote');
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Promote impossible : ' + (e.message || 'erreur WhatsApp') });
+    return;
+  }
+  const who = phone || toPromote.map((j) => jidBare(j)).join(', ');
+  await sock.sendMessage(chat, {
+    text: already.length
+      ? `✅ Admin nommé : *${who}*`
+      : `✅ *${who}* est maintenant admin du groupe.`,
   });
 }
 
@@ -925,6 +1098,16 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.add') {
         await handleAdd(msg, clean, adminPhone);
+        continue;
+      }
+
+      if (cmd === '.kickall') {
+        await handleKickall(msg, adminPhone);
+        continue;
+      }
+
+      if (cmd === '.promote') {
+        await handlePromote(msg, clean, adminPhone);
         continue;
       }
     } catch (e) {
