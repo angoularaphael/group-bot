@@ -70,7 +70,7 @@
     <div class="qr-box" id="qrBox"><span style="color:#333">En attente du QR…</span></div>
     <p class="hint">
       WhatsApp → Paramètres → Appareils connectés → Lier un appareil.<br>
-      Le QR se rafraîchit tout seul. La session reste sur ce serveur après le scan.
+      Si la session est coupée, un <b>nouveau QR</b> s’affiche tout seul : scanne-le pour continuer.
     </p>
     <p class="err" id="error"></p>
     <button type="button" id="refresh">Relancer le QR</button>
@@ -87,11 +87,29 @@
       statusEl.className = 'status ' + kind;
     }
 
+    let askedQr = false;
+
+    async function requestQr() {
+      if (askedQr) return;
+      askedQr = true;
+      try {
+        await fetch('/api/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method: 'qr' }),
+        });
+      } catch (err) {
+        askedQr = false;
+        errorEl.textContent = err.message || 'Impossible de lancer le QR';
+      }
+    }
+
     async function loadStatus() {
       const res = await fetch('/api/status', { cache: 'no-store' });
       const data = await res.json();
       errorEl.textContent = data.qrError || '';
       if (data.connected) {
+        askedQr = false;
         setStatus('Connecté — session OK', 'ok');
         qrBox.innerHTML = '<span style="color:#111;font-weight:700">WhatsApp lié</span>';
         pairingEl.hidden = true;
@@ -104,12 +122,14 @@
         pairingEl.hidden = true;
       }
       if (data.qr) {
-        setStatus('Scanne ce QR', 'wait');
+        askedQr = false;
+        setStatus('Scanne ce QR pour continuer', 'wait');
         qrBox.innerHTML = '<img alt="QR WhatsApp" src="' + data.qr + '">';
         return;
       }
-      setStatus(data.connecting ? 'QR en cours…' : 'Déconnecté', data.connecting ? 'wait' : 'off');
-      qrBox.innerHTML = '<span style="color:#333">Pas de QR pour l’instant</span>';
+      setStatus(data.connecting ? 'Nouveau QR en cours…' : 'Session coupée — nouveau QR…', data.connecting ? 'wait' : 'off');
+      qrBox.innerHTML = '<span style="color:#333">' + (data.connecting ? 'Génération du QR…' : 'Session coupée') + '</span>';
+      if (!data.connecting && !data.qr) requestQr();
     }
 
     refreshBtn.addEventListener('click', async () => {

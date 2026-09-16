@@ -11,6 +11,8 @@ test('la page QR pointe vers le serveur Bothosting et poll /api/status', () => {
   assert.match(html, /\/api\/status/);
   assert.match(html, /\/api\/start/);
   assert.match(html, /Appareils connectés/);
+  assert.match(html, /nouveau QR/i);
+  assert.match(html, /requestQr|method: 'qr'/);
 });
 
 test('le bot sert public/index.html et le port 21774', () => {
@@ -18,4 +20,7 @@ test('le bot sert public/index.html et le port 21774', () => {
   assert.match(src, /public['"], 'index\.html'|public[\\/]index\.html|public', 'index\.html/);
   assert.match(src, /21774/);
   assert.match(src, /prem-eu2\.bot-hosting\.net/);
+  assert.match(src, /function offerNewQr/);
+  assert.match(src, /sessionDead/);
+  assert.match(src, /Session coupée — scanne le nouveau QR/);
 });

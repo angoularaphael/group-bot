@@ -270,11 +270,35 @@ function classifyDisconnect(error) {
     statusCode === 440 ||
     conflict;
   const realLogout =
-    statusCode === DisconnectReason.loggedOut &&
+    (statusCode === DisconnectReason.loggedOut || statusCode === 401) &&
     !conflict &&
-    !replaced &&
-    /logged out/i.test(msg);
-  return { statusCode, msg, conflict, restart, replaced, realLogout };
+    !replaced;
+  const badSession =
+    statusCode === DisconnectReason.badSession ||
+    statusCode === 500 ||
+    /bad session/i.test(msg);
+  const forbidden =
+    statusCode === DisconnectReason.forbidden ||
+    statusCode === 403;
+  const mismatch =
+    statusCode === DisconnectReason.multideviceMismatch ||
+    statusCode === 411;
+  const timedOut =
+    statusCode === DisconnectReason.timedOut ||
+    statusCode === DisconnectReason.connectionLost ||
+    statusCode === 408;
+  const sessionDead = realLogout || badSession || forbidden || mismatch;
+  return {
+    statusCode,
+    msg,
+    conflict,
+    restart,
+    replaced,
+    realLogout,
+    badSession,
+    timedOut,
+    sessionDead,
+  };
 }
 
 function isDisconnectError(err) {
@@ -1822,17 +1846,35 @@ function cancelScheduledReconnect() {
   }
 }
 
+let lastQrOfferAt = 0;
+
+function offerNewQr(reason) {
+  const now = Date.now();
+  if (now - lastQrOfferAt < 4000 && (isLinking || currentQrBase64)) return;
+  lastQrOfferAt = now;
+  cancelScheduledReconnect();
+  reconnectAttempts = 0;
+  isConnected = false;
+  currentQrBase64 = null;
+  pairingCode = null;
+  qrError = reason || 'Session coupée — scanne le nouveau QR pour continuer.';
+  console.log(`[BOT] ${qrError}`);
+  connectToWhatsApp('qr', '', { force: true, clearAuth: true }).catch((e) => {
+    console.warn('[BOT] nouveau QR:', e.message);
+  });
+}
+
 function scheduleReconnect(method, phoneNumber, delayMs, { clearAuth = false } = {}) {
   cancelScheduledReconnect();
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    isLinking = false;
-    qrError = 'Trop de tentatives. Relancez via /api/start.';
+  if (!clearAuth && reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    offerNewQr('Session coupée — scanne le nouveau QR pour continuer.');
     return;
   }
-  reconnectAttempts += 1;
+  if (clearAuth) reconnectAttempts = 0;
+  else reconnectAttempts += 1;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    connectToWhatsApp(method, phoneNumber, { force: true, clearAuth });
+    connectToWhatsApp(method || 'qr', phoneNumber, { force: true, clearAuth });
   }, delayMs);
 }
 
@@ -1905,7 +1947,7 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
       if (connection === 'close') {
         isConnected = false;
         const error = lastDisconnect?.error;
-        const { statusCode, conflict, restart, replaced, realLogout } = classifyDisconnect(error);
+        const { statusCode, conflict, restart, replaced, sessionDead, timedOut } = classifyDisconnect(error);
         console.warn(
           `[BOT] close code=${statusCode} msg=${error?.message || ''} conflict=${conflict} restart=${restart}`
         );
@@ -1913,13 +1955,9 @@ async function connectToWhatsApp(method = 'qr', phoneNumber = '', options = {}) 
           logDisconnect(`connexion close code=${statusCode}`);
         }
         await destroySocket();
-        if (realLogout) {
-          isLinking = false;
-          currentQrBase64 = null;
-          pairingCode = null;
-          reconnectAttempts = 0;
-          clearAuthSession();
-          console.log('[BOT] Session invalidée (logout réel). Rescanne le QR sur la page du bot.');
+        const waitingForScan = !hasRegisteredSession();
+        if (sessionDead || (waitingForScan && (timedOut || !restart))) {
+          offerNewQr('Session coupée — scanne le nouveau QR pour continuer.');
           return;
         }
         const delay = restart ? 1500 : conflict || replaced ? 3000 : 5000;
@@ -2035,7 +2073,8 @@ app.post('/api/logout', async (_req, res) => {
   currentQrBase64 = null;
   pairingCode = null;
   clearAuthSession();
-  res.json({ success: true });
+  offerNewQr('Session coupée — scanne le nouveau QR pour continuer.');
+  res.json({ success: true, message: 'QR relancé' });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
