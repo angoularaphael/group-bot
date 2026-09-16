@@ -379,7 +379,7 @@ function menuText() {
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
     '`.sendfull` — message David WhatsApp aux contacts sauvés (reprend aussi)',
-    '`.sendsms` — SMS David (mobiles 06/07 seulement, 1 / 15 s, reprend après Souaad Bouzidi)',
+    '`.sendsms` — SMS David (mobiles 06/07 seulement, 1 / 15 s, reprend après Yasser Benama)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.count` — combien de contacts BD sont *sur le téléphone*',
@@ -1583,7 +1583,7 @@ async function handleSendsms(msg, text) {
   await sock.sendMessage(chat, {
     text: [
       `⏳ SMS David via gateway : *${list.length}* contact(s) *06/07*, *1 SMS toutes les 15 s*.`,
-      `Reprise après Souaad Bouzidi — limite gateway 200 / jour.`,
+      `Reprise après Yasser Benama.`,
     ].join('\n'),
   });
   const ok = [];

@@ -63,10 +63,11 @@ test('seed Tiphaine : .savecon reprend après #2103', () => {
   assert.equal(isWaSent('33613313950'), true);
   assert.equal(isWaSent('33789471386'), true);
   assert.equal(isWaSent('33641094855'), true);
-  assert.equal(isWaSent('33699070233'), true);
-  assert.equal(isWaSent('33784966995'), false);
+  assert.equal(isWaSent('33699070233'), false);
+  assert.equal(isWaSent('33652522088'), true);
+  assert.equal(isWaSent('33645751556'), false);
   const smsNext = pickSavedUnsent(1);
   assert.ok(smsNext.length);
-  assert.equal(smsNext[0].telephone, '33784966995');
-  assert.match(`${smsNext[0].prenom} ${smsNext[0].nom}`, /Gregori Boens/i);
+  assert.equal(smsNext[0].telephone, '33645751556');
+  assert.match(`${smsNext[0].prenom} ${smsNext[0].nom}`, /angélique hadejba/i);
 });
