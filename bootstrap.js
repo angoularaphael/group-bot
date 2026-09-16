@@ -42,6 +42,7 @@ const ENV_KEYS = [
   'ADD_DELAY_MS',
   'SAVE_BATCH',
   'SAVE_DELAY_MS',
+  'PROGRESS_EVERY_MS',
 ];
 
 function loadRootEnv() {

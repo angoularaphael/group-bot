@@ -84,6 +84,7 @@ const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
 const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
 const SAVE_BATCH = Math.max(1, parseInt(process.env.SAVE_BATCH || '3000', 10) || 3000);
 const SAVE_DELAY_MS = Math.max(400, parseInt(process.env.SAVE_DELAY_MS || '800', 10) || 800);
+const PROGRESS_EVERY_MS = Math.max(5000, parseInt(process.env.PROGRESS_EVERY_MS || '15000', 10) || 15000);
 const MAX_RECONNECT_ATTEMPTS = 6;
 
 const BOT_COMMANDS = new Set([
@@ -350,6 +351,16 @@ async function sendSafe(jid, content) {
     console.warn('[BOT] send:', e.message);
     return false;
   }
+}
+
+function createProgressPing(chat) {
+  let last = Date.now();
+  return async (text, force = false) => {
+    const now = Date.now();
+    if (!force && now - last < PROGRESS_EVERY_MS) return;
+    last = now;
+    await sendSafe(chat, { text });
+  };
 }
 
 function menuText() {
@@ -1341,7 +1352,7 @@ async function handleSavecon(msg, text) {
   startJob({ command: '.savecon', total: list.length, chat });
   await sock.sendMessage(chat, {
     text: [
-      `⏳ Enregistrement de *${list.length}* contact(s) BD (1 par 1, ${SAVE_DELAY_MS / 1000} s). Les déjà sauvés sont ignorés.`,
+      `⏳ Enregistrement de *${list.length}* contact(s) BD (1 par 1, ${SAVE_DELAY_MS / 1000} s). Suivi toutes les 15 s.`,
       ...saveResume,
     ].filter(Boolean).join('\n'),
   });
@@ -1349,6 +1360,7 @@ async function handleSavecon(msg, text) {
   const fail = [];
   let aborted = false;
   const retries = new Map();
+  const ping = createProgressPing(chat);
   try {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
@@ -1398,11 +1410,10 @@ async function handleSavecon(msg, text) {
         markFail(c, e.message);
         fail.push({ ...c, error: e.message });
       }
-      if ((i + 1) % 50 === 0 || i === list.length - 1) {
-        await sendSafe(chat, {
-          text: `📥 ${ok.length} sauvés / ${fail.length} échecs — ${i + 1}/${list.length}\nDernier : ${contactLabel(c)}`,
-        });
-      }
+      await ping(
+        `📥 ${ok.length} sauvés / ${fail.length} échecs — ${i + 1}/${list.length}\nEn cours : ${contactLabel(c)}`,
+        i === list.length - 1
+      );
       if (i < list.length - 1) {
         await sleep(SAVE_DELAY_MS);
         if (!(await ensureWhatsAppOrPause(c, 45000))) {
@@ -1462,7 +1473,7 @@ async function handleSendfull(msg, text) {
   startJob({ command: '.sendfull', total: list.length, chat });
   await sock.sendMessage(chat, {
     text: [
-      `⏳ Message David à *${list.length}* contact(s) sauvés, 1 par 1 (${ADD_DELAY_MS / 1000} s), avec le prénom…`,
+      `⏳ Message David à *${list.length}* contact(s) sauvés, 1 par 1 (${ADD_DELAY_MS / 1000} s). Suivi toutes les 15 s.`,
       ...sendResume,
     ].filter(Boolean).join('\n'),
   });
@@ -1470,6 +1481,7 @@ async function handleSendfull(msg, text) {
   const fail = [];
   let aborted = false;
   const retries = new Map();
+  const ping = createProgressPing(chat);
   try {
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
@@ -1506,11 +1518,10 @@ async function handleSendfull(msg, text) {
         markFail(c, e.message);
         fail.push({ ...c, error: e.message });
       }
-      if ((i + 1) % 25 === 0 || i === list.length - 1) {
-        await sendSafe(chat, {
-          text: `📤 ${ok.length} envoyés / ${fail.length} échecs — ${i + 1}/${list.length}\nDernier : ${contactLabel(c)}`,
-        });
-      }
+      await ping(
+        `📤 ${ok.length} envoyés / ${fail.length} échecs — ${i + 1}/${list.length}\nEn cours : ${contactLabel(c)}`,
+        i === list.length - 1
+      );
       if (i < list.length - 1) {
         await sleep(ADD_DELAY_MS);
         if (!(await ensureWhatsAppOrPause(c, 45000))) {
