@@ -57,7 +57,10 @@ test('seed Tiphaine : .savecon reprend après #2103', () => {
   assert.equal(batch[0].telephone, '33783482626');
   assert.match(`${batch[0].prenom} ${batch[0].nom}`, /G[ée]rard Philippe/i);
   assert.equal(isWaSent('33659038532'), true);
+  assert.equal(isWaSent('33613728636'), true);
+  assert.equal(isWaSent('33641454032'), true);
   const smsNext = pickSavedUnsent(1);
   assert.ok(smsNext.length);
-  assert.equal(smsNext[0].telephone, '33613728636');
+  assert.equal(smsNext[0].telephone, '33613313950');
+  assert.match(`${smsNext[0].prenom} ${smsNext[0].nom}`, /Christelle Chaudier/i);
 });

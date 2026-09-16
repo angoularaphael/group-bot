@@ -85,6 +85,7 @@ const ADD_BATCH = Math.max(1, parseInt(process.env.ADD_BATCH || '5', 10) || 5);
 const ADD_DELAY_MS = Math.max(3000, parseInt(process.env.ADD_DELAY_MS || '3000', 10) || 3000);
 const SAVE_BATCH = Math.max(1, parseInt(process.env.SAVE_BATCH || '3000', 10) || 3000);
 const SAVE_DELAY_MS = Math.max(400, parseInt(process.env.SAVE_DELAY_MS || '800', 10) || 800);
+const SMS_DELAY_MS = Math.max(15000, parseInt(process.env.SMS_DELAY_MS || '15000', 10) || 15000);
 const PROGRESS_EVERY_MS = Math.max(5000, parseInt(process.env.PROGRESS_EVERY_MS || '15000', 10) || 15000);
 const MAX_RECONNECT_ATTEMPTS = 6;
 
@@ -378,7 +379,7 @@ function menuText() {
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
     '`.sendfull` — message David WhatsApp aux contacts sauvés (reprend aussi)',
-    '`.sendsms` — même offre David par *SMS gateway* (saute les 11 déjà envoyés sur WhatsApp)',
+    '`.sendsms` — même offre David par *SMS gateway* (1 SMS / 15 s, saute WhatsApp + Bazet + Julie)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.count` — combien de contacts BD sont *sur le téléphone*',
@@ -1572,7 +1573,7 @@ async function handleSendsms(msg, text) {
   }
   if (!list.length) {
     await sock.sendMessage(chat, {
-      text: 'ℹ️ Aucun contact *saved* en attente. Les 11 WhatsApp déjà envoyés sont ignorés. Lance `.savecon` si besoin.',
+      text: 'ℹ️ Aucun contact *saved* en attente. WhatsApp + Bazet + Julie sont déjà marqués. Lance `.savecon` si besoin.',
     });
     return;
   }
@@ -1581,8 +1582,8 @@ async function handleSendsms(msg, text) {
   startJob({ command: '.sendsms', total: list.length, chat });
   await sock.sendMessage(chat, {
     text: [
-      `⏳ SMS David via gateway : *${list.length}* contact(s) (les 11 WhatsApp déjà envoyés sont sautés).`,
-      `Suivi toutes les 15 s.`,
+      `⏳ SMS David via gateway : *${list.length}* contact(s), *1 SMS toutes les 15 s*.`,
+      `Reprise après Julie Chauvin — les WhatsApp + Bazet + Julie sont sautés.`,
     ].join('\n'),
   });
   const ok = [];
@@ -1611,10 +1612,10 @@ async function handleSendsms(msg, text) {
         fail.push({ ...c, error: e.message });
       }
       await ping(
-        `📲 ${ok.length} SMS / ${fail.length} échecs — ${i + 1}/${list.length}\nEn cours : ${contactLabel(c)}`,
-        i === list.length - 1
+        `📲 ${ok.length} SMS / ${fail.length} échecs — ${i + 1}/${list.length}\nDernier : ${contactLabel(c)}`,
+        true
       );
-      if (i < list.length - 1) await sleep(ADD_DELAY_MS);
+      if (i < list.length - 1) await sleep(SMS_DELAY_MS);
     }
   } finally {
     bulkRunning = false;

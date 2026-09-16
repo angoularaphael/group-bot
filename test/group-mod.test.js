@@ -28,6 +28,7 @@ test('.kickall et .promote sont dans le menu et les commandes', () => {
   assert.match(src, /handleSendtest/);
   assert.match(src, /handleSendfull/);
   assert.match(src, /PROGRESS_EVERY_MS/);
+  assert.match(src, /SMS_DELAY_MS/);
   assert.match(src, /createProgressPing/);
   assert.match(src, /groupParticipantsUpdate\(groupId, batch, 'remove'\)/);
   assert.match(src, /groupLeave\(groupId\)/);
