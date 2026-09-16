@@ -19,6 +19,7 @@ test('.kickall et .promote sont dans le menu et les commandes', () => {
   assert.match(src, /'\.savecon'/);
   assert.match(src, /'\.sendtest'/);
   assert.match(src, /'\.sendfull'/);
+  assert.match(src, /'\.sendsms'/);
   assert.match(src, /'\.log'/);
   assert.match(src, /'\.count'/);
   assert.match(src, /handleKickall/);

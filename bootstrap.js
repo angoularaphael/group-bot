@@ -43,6 +43,8 @@ const ENV_KEYS = [
   'SAVE_BATCH',
   'SAVE_DELAY_MS',
   'PROGRESS_EVERY_MS',
+  'SMS_GATEWAY_URL',
+  'SMS_GATEWAY_SECRET',
 ];
 
 function loadRootEnv() {

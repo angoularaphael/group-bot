@@ -46,7 +46,8 @@ const {
   shouldTryNextJid,
   shouldInviteAfterFail,
 } = require('./lib/add-status');
-const { seanceOfferteWhatsAppText, waFirstName, waContactName } = require('./lib/david-wa');
+const { seanceOfferteWhatsAppText, seanceOfferteSmsText, waFirstName, waContactName } = require('./lib/david-wa');
+const { sendSeanceSms } = require('./lib/sms-out');
 const {
   startJob,
   touchCurrent,
@@ -90,7 +91,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.savecon', '.sendtest', '.sendfull', '.log', '.count',
+  '.savecon', '.sendtest', '.sendfull', '.sendsms', '.log', '.count',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -376,7 +377,8 @@ function menuText() {
     '`.unmute` — tout le monde peut écrire',
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
-    '`.sendfull` — message David aux contacts sauvés (reprend aussi)',
+    '`.sendfull` — message David WhatsApp aux contacts sauvés (reprend aussi)',
+    '`.sendsms` — même offre David par *SMS gateway* (saute les 11 déjà envoyés sur WhatsApp)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.count` — combien de contacts BD sont *sur le téléphone*',
@@ -1554,6 +1556,84 @@ async function handleSendfull(msg, text) {
   });
 }
 
+async function handleSendsms(msg, text) {
+  const chat = msg.key.remoteJid;
+  if (bulkRunning) {
+    await sock.sendMessage(chat, { text: '⏳ Un envoi / enregistrement est déjà en cours. Attends la fin.' });
+    return;
+  }
+  const want = parseJobCount(text, 'sendsms', SAVE_BATCH);
+  let list;
+  try {
+    list = pickSavedUnsent(want);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ BD introuvable : ' + e.message });
+    return;
+  }
+  if (!list.length) {
+    await sock.sendMessage(chat, {
+      text: 'ℹ️ Aucun contact *saved* en attente. Les 11 WhatsApp déjà envoyés sont ignorés. Lance `.savecon` si besoin.',
+    });
+    return;
+  }
+  bulkRunning = true;
+  const started = Date.now();
+  startJob({ command: '.sendsms', total: list.length, chat });
+  await sock.sendMessage(chat, {
+    text: [
+      `⏳ SMS David via gateway : *${list.length}* contact(s) (les 11 WhatsApp déjà envoyés sont sautés).`,
+      `Suivi toutes les 15 s.`,
+    ].join('\n'),
+  });
+  const ok = [];
+  const fail = [];
+  const ping = createProgressPing(chat);
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      const body = seanceOfferteSmsText(c);
+      touchCurrent(c, i + 1);
+      try {
+        const result = await sendSeanceSms(c.telephone, body, { prenom: c.prenom, nom: c.nom });
+        if (!result.sent) throw new Error(result.reason || 'sms_refuse');
+        markPhone(c.telephone, {
+          status: 'wa_sent',
+          nom: c.nom,
+          prenom: c.prenom,
+          ville: c.ville,
+          via: 'sms',
+        });
+        markOk(c);
+        ok.push(c);
+      } catch (e) {
+        console.warn(`[BOT] .sendsms ${c.telephone}:`, e.message);
+        markFail(c, e.message);
+        fail.push({ ...c, error: e.message });
+      }
+      await ping(
+        `📲 ${ok.length} SMS / ${fail.length} échecs — ${i + 1}/${list.length}\nEn cours : ${contactLabel(c)}`,
+        i === list.length - 1
+      );
+      if (i < list.length - 1) await sleep(ADD_DELAY_MS);
+    }
+  } finally {
+    bulkRunning = false;
+  }
+  finishJob();
+  const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
+  const used = usedStats();
+  await sendSafe(chat, {
+    text: [
+      ok.length
+        ? `✅ *${ok.length}/${list.length}* SMS David envoyés (${mins} min)`
+        : `❌ *0/${list.length}* SMS envoyé`,
+      fail.length ? `❌ ${fail.length} échec(s) — statut *saved* conservé, retente \`.sendsms\`.` : '',
+      `📩 Déjà envoyés (WhatsApp + SMS) : *${used.waSent}*`,
+      ok.length ? `Dernier SMS : ${contactLabel(ok[ok.length - 1])}` : '',
+    ].filter(Boolean).join('\n'),
+  });
+}
+
 async function handleSendtest(msg) {
   const chat = msg.key.remoteJid;
   const list = labeledTestContacts();
@@ -1804,6 +1884,11 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.sendfull') {
         await handleSendfull(msg, clean);
+        continue;
+      }
+
+      if (cmd === '.sendsms') {
+        await handleSendsms(msg, clean);
         continue;
       }
 

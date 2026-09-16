@@ -26,6 +26,15 @@ test('lien tracké src=whatsapp, pas de HTML ni promo criée', () => {
   assert.doesNotMatch(text, /\*/);
 });
 
+test('SMS séance offerte : src=sms', () => {
+  const { seanceOfferteSmsText, SEANCE_OFFERTE_SMS_URL } = require('../lib/david-wa');
+  const text = seanceOfferteSmsText({ prenom: 'marie', telephone: '33600000001' });
+  assert.match(text, /^Salut Marie,/);
+  assert.match(text, /seance d'essai/);
+  assert.ok(text.includes(SEANCE_OFFERTE_SMS_URL));
+  assert.match(text, /src=sms/);
+});
+
 test('deux numéros → textes un peu différents (anti-copie identique)', () => {
   const a = seanceOfferteWhatsAppText({ prenom: 'lea', telephone: '33611111111' });
   const b = seanceOfferteWhatsAppText({ prenom: 'marc', telephone: '33611111122' });
