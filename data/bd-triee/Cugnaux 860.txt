@@ -55,11 +55,8 @@ De Redon;Sebastien;cugnaux;648044305;titeufseb31@gmail.com;1981-04-27
 Cazalot;Romain;cugnaux;641452273;romaindu13tkt@hotmail.fr;1992-08-27
 Teixeira;Charlène;cugnaux;651935454;cha.teixeira31@gmail.com;1993-12-16
 Pelissier;Sandra;colomiers;679111600;pelissier-sandra@hotmail.fr;1996-02-04
-Barruel;Pierre;cugnaux;567166106;pierree.barruel@laposte.net;1980-02-01
 philippe;benjamin;cugnaux;650735280;benjiphil19@gmail.com;1990-08-04
-Quirion;Hugh;toulouse;562864864;hughguirion@yahoo.fr;1982-12-21
 Martinez;Virginie;cugnaux;679308196;ninetta31@hotmail.fr;1984-05-02
-HATET;Aurore;toulouse;531475699;hatet.aurore@outlook.fr;1990-02-20
 Valero;Camille;cugnaux;631499810;camillevalero61@gmail.com;1991-11-11
 Aboubaker;Bouzine;cugnaux;641469458;sedlapo006@gmail.com;1988-07-04
 HASSAN;OMARI;cugnaux;634385923;omari.hassan@laposte.net;1992-09-01
@@ -70,17 +67,14 @@ MARE;Anna;cugnaux;642967434;naniemare@hotmail.fr;1990-01-02
 Raw;Mayu;cugnaux;638489252;mayu.raw@icloud.com;1992-11-19
 Moncasi;Mélanie;cugnaux;632307879;mel311093@hotmail.com;1993-09-30
 lemaire;jean-pierre;cugnaux;663560043;jean-pierre.lemaire31@orange.fr;1985-02-06
-MARLOT;ERIC;CUGNAUX;562208132;ericmarl@laposte.net;1982-09-09
 Brillouet;Cheyenne;cugnaux;763243606;c.h.a.w.a.x@hotmail.fr;1994-12-12
 Barbosa;Stéphanie;cugnaux;660201824;stephanie.barbosa31270@gmail.com;1991-08-11
 Catau;Clémentine;cugnaux;665608484;clementinecatau@gmail.com;1995-11-24
 Caillaud;Anais;cugnaux;628572006;caillaud_anais@yahoo.com;1996-03-19
 Hadoues;Ines;cugnaux;784883153;ineschani@hotmail.com;1996-12-16
-HAOUILI;Amina;cugnaux;951675387;minah590@laposte.net;1992-06-13
 kdrouci- aissani;naïma;cugnaux;762798388;kadrunouza@gmail.com;1985-01-17
 Jekie;Suriane;cugnaux;652815458;cyriellecici25@gmail.com;1991-05-05
 Bensaha;Slimane;cugnaux;656897539;slimanebensaha2@gmail.com;1983-03-04
-duchemin;anne;cugnaux;561924596;ducheminf@outlook.fr;1980-04-04
 PÉGORIÉ;Flora;cugnaux;649821568;flo-0912@orange.fr;1980-06-01
 ESCABASSE;Yoann;cugnaux;677095731;escabay31@hotmail.fr;1986-02-13
 Dayras;Julie;cugnaux;659373963;juliedayras@sfr.fr;1986-08-24
@@ -111,8 +105,6 @@ elalami;Hakim;cugnaux;626222276;elalami212@hotmail.fr;1980-03-08
 Couppe de Lahongrais;Elsa;cugnaux;754365631;ptite-pianiste31@live.fr;1989-03-20
 Maillot;Nicolas;cugnaux;754322755;nico97438maillot@gmail.com;1988-05-27
 Moussaoui;Amina;cugnaux;783161286;moussaoui-amina@live.fr;1987-10-20
-Pariseau;Suzette;toulouse;954329766;suzettepariseau@yahoo.fr;1980-09-11
-moreau;melissa;toulouse;532591812;moreaujul@laposte.net;1987-05-04
 Grime;Laetitia;cugnaux;698513305;laetitia.grime@gmail.com;1990-12-11
 vidal;ludivine;cugnaux;615246053;vidal.ludi@gmail.com;1985-09-23
 Barrie;Samira;cugnaux;627527594;barriesamira@icloud.com;1989-07-25

@@ -64,12 +64,6 @@ Ourn;Ariane;tournefeuille;649287607;ariane-r@hotmail.fr;1982-04-09
 Baara;Nabil;tournefeuille;664436114;chebnabil31@hotmail.fr;1984-11-30
 Clerence;Leslie;leguevin;781582547;clerenceleslie@gmail.com;1992-02-15
 Lacolla;Laura;tournefeuille;749239759;lacolla.laura@gmail.com;1995-12-29
-Grec;Yle;tournefeuille;548457486;ylegrec@yahoo.com;1987-02-11
-castel;julia;tournefeuille;531220006;juliaa.castel@hotmail.com;1993-06-03
-michaud;oceane;tournefeuille;531220083;oceanee.michaud@outlook.fr;1990-05-03
-Roland;Manon;tournefeuille;561859734;roland.baudin@cnet.francetelecom.fr;1984-12-08
-DUREPOS;RAYMOND;tournefeuille;585628646;raymodurepos@laposte.net;1982-03-01
-besson;barbara;tournefeuille;531226019;barbaara.besson@outlook.fr;1988-05-07
 Pinto leite;Jennifer;tournefeuille;612132052;torijenny@hotmail.fr;1989-04-27
 merady;indy;toulouse;760257936;meradyindy@gmail.com;1990-10-05
 martinez;sylvain;tournefeuille;612143426;martinez_sylvain@hotmail.fr;1988-06-11
@@ -84,7 +78,6 @@ hamaoui;aicha;tournefeuille;624513961;aichahamaoui04@gmail.com;1994-08-15
 mune;diane;tournefeuille;661453331;dhia@gmx.fr;1980-09-18
 Preuss;Jérôme;tournefeuille;779168164;jeromepreuss5@gmail.com;1987-02-17
 Malaval;Delphine;tournefeuille;650571761;delphine.malaval@hotmail.fr;1992-07-13
-david;celine;tournefeuille;531220188;davidcelines@laposte.net;1982-04-03
 Gasc;Clea;toulouse;611091058;clea34gasc@outlook.fr;1992-01-22
 raynaud;gaëlle;tournefeuille;606594846;gaelleromeo@gmail.com;1982-07-08
 Zielonka;Fanny;tournefeuille;636865055;fanzielonka@gmail.com;1997-06-14
@@ -118,7 +111,6 @@ bensafiddine;rania;tournefeuille;767784189;enzo.rania@orange.fr;1989-07-09
 Lopez;Sonia;tournefeuille;652006616;chypykida@yahoo.fr;1980-11-27
 Patole;Enza;tournefeuille;621374433;rahpatoleenza@yahoo.fr;1997-05-03
 Esteban;Emilie;tournefeuille;761102375;emilie.esteban31000@gmail.com;1993-10-18
-ABDELLATIF;Slimane;tournefeuille;567087388;slmabdel55@outlook.fr;1989-01-10
 Lab;Gaëlle;tournefeuille;682313265;gae.labourot@gmail.com;1986-01-23
 le guennan;laurine;tournefeuille;614975428;laurine.leguennan@gmail.com;1985-12-04
 Daniel;Charlotte;leguevin;782029760;charlottedaniel197@yahoo.fr;1987-03-05

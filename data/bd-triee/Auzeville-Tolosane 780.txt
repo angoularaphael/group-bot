@@ -41,7 +41,6 @@ Roux;Lucile;villeneuve tolosane;645514727;lucil.roux@gmail.com;1989-08-01
 Copin;Amandine;martres tolosane;689278345;amandineteddyglenn@gmail.com;1994-08-12
 kone;issa;auzeville tolosane;758292101;issakone99@hotmail.com;1997-01-30
 Delhom;Genaly;martres tolosane;783000465;delhomgenaly31220@gmail.com;1997-10-14
-fauchard;alain;villeneuve tolosane;532597745;alainfauchard@outlook.fr;1980-07-12
 garcia;marion;villeneuve tolosane;698563341;marion.garcia000@gmail.com;1990-12-01
 Estelle;Le Doaré;villeneuve tolosane;660523228;estelle.led31@gmail.com;1995-08-27
 Azam;Fabien;VERFEIL;646333570;fabienazam@hotmail.fr;1985-11-19
@@ -52,10 +51,8 @@ schmelzer;nicolas;ramonville st agne;645708719;nicoschmelzer34@gmail.com;1987-01
 Cambraye;Benjamin;villeneuve tolosane;698487701;cambrayebenjamin@gmail.com;1994-11-15
 Kassous;Kheira;villeneuve tolosane;658432945;kheirakass@hotmail.fr;1997-07-12
 Marquez;Allison;villeneuve tolosane;650199976;akyra31@hotmail.fr;1985-12-31
-auvy;anne-ga?lle;villeneuve tolosane;551485206;ga.3ll3@hotmail.fr;1989-09-27
 Livran;Sarah;villeneuve tolosane;771708530;sarah.livran@outlook.fr;1997-06-05
 scuro;magalie;mane;608142080;surojulia@gmail.com;1981-03-17
-HABET;Isabelle;martres tolosane;561972642;habet.isabell@outlook.fr;1990-10-16
 fritz;sophia;villeneuve tolosane;659431037;sophia.fritz0403@gmail.com;1994-10-22
 labyad;anasd;villeneuve tolosane;781771192;anis261187@hotmail.co.uk;1987-11-26
 Garrigues;Louis;villeneuve tolosane;625194697;louis.garrrigues@gmail.com;1997-06-10
@@ -290,8 +287,6 @@ Bouakrif;Nora;VILLENEUVE TOLOSANE;646269701;nora.bouakrif@gmail.com;1992-05-12
 Chapotot;Eloic;VILLENEUVE TOLOSANE;635950433;eloic6@hotmail.com;1989-03-06
 cha;cha;VILLENEUVE TOLOSANE;625326871;youyou0911@gmail.com;1994-05-02
 Broca;Julie;VILLENEUVE TOLOSANE;613717977;broca.julie@gmail.com;1992-02-19
-Rousti;Alexandra;Villeneuve Tolosane;336206453;alexandrarousti@yahoo.fr;1984-03-02
-Ivancic;Michel;Villeneuve-Tolosane,;954225245;michel_ivancic@protonmail.com;1980-05-15
 MENAUGE;France;VILLENEUVE TOLOSANE;695466557;qwertyself@yahoo.fr;1985-09-27
 depirou;lise;villeneuve tolosane;762912935;lisedepirou73@gmail.com;1997-09-08
 lopez;sonia;martres tolosane;627631566;saucisse31390@gmail.com;1985-10-03

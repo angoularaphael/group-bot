@@ -16,7 +16,6 @@ Migrand;Audrey;rouffiac;789381740;migrand-audrey@hotmail.com;1996-09-03
 Jimenez;Cecile;rouffiac tolosan;622675745;cecilegandy@hotmail.com;1983-04-04
 Lamart;Michael;rouffiac d aude;676306398;lamartmichael@gmail.com;1987-08-23
 Rouffiac;Alison;coueron;681432717;rouffiac.alison57@gmail.com;1989-01-11
-Frezouls;Pauline;rouffiac;563382079;poupounnedu81@hotmail.fr;1989-06-21
 Bourenane;Marion;rouffiac tolosan;777674997;marion.bourenane@wanadoo.fr;1989-08-12
 Amouroux;Manon;rouffiac d aude;650656743;amourouxmanon@hotmail.fr;1991-01-12
 Hivert;Delphine;rouffiac tolosan;681641024;delphine.hivert@gmail.com;1986-05-10

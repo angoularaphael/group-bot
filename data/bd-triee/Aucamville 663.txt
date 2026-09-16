@@ -34,9 +34,6 @@ jarlan;caroline;aucamville;681503946;kro.lyne@hotmail.fr;1985-04-09
 Anton;Adam;aucamville;638844497;anton_adam@hotmail.fr;1988-06-01
 Farja;Arnaud;AUCAMVILLE;671230607;ajrcorbeille@gmail.com;1995-05-09
 Francois chaoub;Halima;aucamville;636444118;ahlam.chaoub@gmail.com;1988-06-20
-lino;maryline;aucamville;563275573;maryline.lino@outlook.fr;1981-04-11
-poulolo;jessy;aucamville;336228927;jeska972@yahoo.fr;1985-02-26
-Pechart;Loïs;aucamville;561271986;lois.pechaart@outlook.fr;1980-02-01
 Garnung;Camille;aucamville;661448698;camille.garnung@wanadoo.fr;1992-11-10
 KOUAME;Nancy;aucamville;682794850;gigik16@yahoo.fr;1989-05-22
 Tournier;Cyrine;aucamville;646496562;tourniercyrine@gmail.com;1996-07-07
@@ -54,7 +51,6 @@ Gonzalez;Sébastien;aucamville;785992750;gonzalezsebastien72@gmail.com;1986-11-1
 rihane;fatima;aucamville;641017432;kenza.chauvel@gmail.com;1991-05-24
 chauchat;Stéphanie;aucamville;615052726;stephanie.chauchat31@gmail.com;1991-01-07
 girard;audrey;aucamville;699594902;audreygirard84@outlook.fr;1984-06-14
-Cottereau;Sandrine;aucamville;534316491;sandrine.cottereau@outlook.fr;1984-04-22
 bardet;elodie;aucamville;684304476;morphee.94@hotmail.fr;1983-05-14
 severin;amandine;aucamville;658008733;aseverin@hotmail.fr;1990-10-06
 Cartier;Lucie;aucamville;627873230;cartierlucie0811@gmail.com;1997-11-02

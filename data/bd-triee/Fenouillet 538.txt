@@ -26,7 +26,6 @@ Masaoudi;Loubna;toulouse;636070780;loubnamasaoudi863@gmail.com;1985-05-22
 Abdelkader;Bacha;ST PAUL DE FENOUILLET;698980973;a_bacha@orange.fr;1983-02-08
 Falgon;Damien;st alban;768702683;leddpak31@hotmail.com;1997-08-21
 Djedje;Linda;toulouse;749133986;djedjelindapetronille25@gmail.com;1993-09-30
-ayma;charlotte;fenouillet;568582564;xcha.chaa@live.fr;1995-03-07
 Nieto;Guylaine;st paul de fenouillet;648563330;guylaineenzo@gmail.com;1986-05-15
 Neveux;Christopher;st paul de fenouillet;646214604;christopherdu13003@hotmail.fr;1994-02-21
 montal;audrey;gagnac sur garonne;627028658;audrey.montal@gmail.com;1990-09-02
@@ -60,13 +59,11 @@ Ndimangar;Annabelle;fenouillet;640555816;annabelle.ndimangar@gmail.com;1990-04-1
 DUDUVEICA;Leonard;fenouillet;751566700;leoduduveica31780@gmail.com;1998-02-04
 Ferre;Laetitia;fenouillet;665339114;ferre1997@outlook.fr;1997-04-24
 ERY;celine;st paul de fenouillet;601100100;celine.ery@gmail.com;1980-08-20
-givry;georgette;fenouillet;561700627;affetilanater@laposte.net;1985-11-19
 Gidel;Kathleen;fenouillet;618249212;kaath-g@hotmail.fr;1993-05-26
 Begue;Nathalie;fenouillet;621602072;nath.begue31@gmail.com;1981-11-26
 Corre;Marion;fenouillet;782442148;corre.marion31@gmail.com;1994-12-19
 Maton;Clementine;st paul de fenouillet;615066627;clementine.maton@hotmail.fr;1989-06-11
 Bes;Laurent;st paul de fenouillet;675363890;laurentbes@wanadoo.fr;1984-03-25
-Pluquet;Michel;le bois plage en re;546091720;micheel.pluquet@hotmail.com;1980-02-01
 Akouba;Meliha;la garde;766097603;akoubameliha@gmail.com;1997-08-21
 bazot;chrystal;fenouillet;643636767;chrystal.bazot@gmail.com;1996-03-21
 Laariche;Fatiha;fenouillet;632144961;laarichef@yahoo.fr;1981-08-06

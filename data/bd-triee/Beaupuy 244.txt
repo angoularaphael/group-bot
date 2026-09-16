@@ -11,7 +11,6 @@ shasheet;Rasha;limoges;751528009;rashashasheet@gmail.com;1994-06-09
 Nabarlas;Samantha;limoges;656779423;samantha.nabarlas@laposte.net;1987-04-20
 Lina;Matt;beaupuy;767277351;matthieu.agros@gmail.com;1996-04-07
 Lépine;Mylène;beaupuy;607315755;lepine.finance@gmail.com;1992-08-04
-Simoes prior;Isabel;beaupuy;553842007;carlosisabel@live.fr;1984-01-16
 Nasma;Abdallah;limoges;650757901;n.abdallah276@laposte.net;1989-06-27
 Caminotto;Anaïs;beaupuy;643047532;nana.caminotto@gmail.com;1996-06-11
 Bodros;Ange-Line;beaupuy;631421158;albodros@hotmail.fr;1986-04-16

@@ -21,6 +21,7 @@ const { pickUnsaved, pickSavedUnsent, loadProdContacts } = require('../lib/conta
 test('un contact sauvé n’est plus repris par .savecon', () => {
   const pool = loadProdContacts();
   assert.ok(pool.length > 10, 'bd triee attendue');
+  assert.ok(pool.every((c) => /^(336|337)/.test(c.telephone)), 'BD mobiles 06/07 seulement');
   const first = pool[0];
   const second = pool[1];
   markPhone(first.telephone, { status: 'saved', prenom: first.prenom, nom: first.nom });
@@ -59,8 +60,11 @@ test('seed Tiphaine : .savecon reprend après #2103', () => {
   assert.equal(isWaSent('33659038532'), true);
   assert.equal(isWaSent('33613728636'), true);
   assert.equal(isWaSent('33641454032'), true);
+  assert.equal(isWaSent('33613313950'), true);
+  assert.equal(isWaSent('33789471386'), true);
+  assert.equal(isWaSent('33641094855'), false);
   const smsNext = pickSavedUnsent(1);
   assert.ok(smsNext.length);
-  assert.equal(smsNext[0].telephone, '33613313950');
-  assert.match(`${smsNext[0].prenom} ${smsNext[0].nom}`, /Christelle Chaudier/i);
+  assert.equal(smsNext[0].telephone, '33641094855');
+  assert.match(`${smsNext[0].prenom} ${smsNext[0].nom}`, /Mehdi Tairi/i);
 });

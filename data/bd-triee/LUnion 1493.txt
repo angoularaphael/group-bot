@@ -17,7 +17,6 @@ michel;laura;l union;644116960;l.michel539@laposte.net;1992-09-07
 Zanon;Melanie;nanterre;634552288;zanonmelanie1986@gmail.com;1986-09-15
 Lamotte;Alicia;la neuve lyre;778840201;david.lamotte99@sfr.fr;1989-06-05
 GARRIGUES;Sébastien;lapeyrouse fossat;676069646;cocoseb2@hotmail.com;1983-09-04
-John;Sabrina;orleans;238733544;sabriniroupette@hotmail.fr;1981-11-13
 freund;véronique;diemeringen;636748779;freundvero59@gmail.com;1984-11-20
 cotonat;vanessa;l union;647960820;candiceinayamanon@yahoo.com;1983-12-04
 salem;ashraf;aubervilliers;646105374;zaza.loubna@hotmail.fr;1980-01-01
@@ -100,10 +99,8 @@ vangrootenbruele;julien;wattrelos;629556064;jujuvgb@hotmail.fr;1994-12-06
 Calabrese;Sophie;millas;752609145;molule51100@gmail.com;1981-01-17
 Maillot;Marine;boivre la vallee;648624140;marinemaillotreunion@gmail.com;1995-11-23
 Matonnat;Nicolas;oloron-sainte-marie;601546707;nikovivi64@gmail.com;1996-05-09
-dubois;sandrine;l union;532592620;sandrinee.dubois@hotmail.com;1992-05-04
 hernandes;samira;l union;780036111;ramranisamira@gmail.com;1982-08-14
 Ibanez;Jonathan;pont st esprit;671549197;pacman-07@hotmail.fr;1994-09-04
-Aquilina;Lucile;paris;189327244;lucile.aquilina@hotmail.com;1986-10-18
 Croutsch;Yannick;sarre union;603887396;yannick.croutsch@gmail.com;1981-06-03
 dorilas;angélique;bosrobert;622034897;angyreunion@hotmail.com;1982-01-06
 ondias;priscilia;clermont ferrand;602635945;ondiasp@gmail.com;1989-04-10
@@ -111,7 +108,6 @@ facquet;gwendoline;anzin;765281766;gwendolinefacquet@icloud.com;1997-05-24
 Rapin;Rachel;la reunion;664136766;rapin.rachel@orange.fr;1982-01-01
 kovac;annabelle;sarre union;685710613;annabel67@hotmail.fr;1986-10-04
 Poinot;Julien;la reunion;658668323;julienpoinot@hotmail.fr;1985-05-11
-Feibel;Vanessa;sarre union;954405354;naeliaeline@gmail.com;1981-01-28
 Stora Calté;Elsa;l union;683721569;elsa.stora@live.fr;1988-03-21
 Abouda;Samir;Sarre union;681177160;samsam67260@gmail.com;1987-02-07
 Stempfer;Denis;sarre union;771002975;princesayen@hotmail.fr;1986-07-22
@@ -154,7 +150,6 @@ OLIVEIRA;RUBEN;RomillysurSeine;646413390;oliveiraruben456@gmail.com;1989-03-06
 PELEGRINA;AMELIE;LUnion;686654345;a.pelegrina@hotmail.fr;1985-12-25
 le senechal;cecilia;amiens;784666654;jambonnette1980@gmail.com;1980-01-10
 HASENFRATZ;JENNIFER;SarreUnion;770093754;jennifernelio67@gmail.com;1990-07-19
-Gahinet;Pascal;le havre;235221700;gahinet@noos.fr;1985-03-22
 Saissac;Anthony;l union;630847007;anthony.saissac@orange.fr;1985-08-09
 MARIETTE;Amandine;issoire;770436229;amandine.mariette@hotmail.fr;1984-09-08
 Soufit;Katia;massy;769000632;katiasoufit99@gmail.com;1990-10-16

@@ -14,6 +14,7 @@ const {
 test('.kickall et .promote sont dans le menu et les commandes', () => {
   const src = fs.readFileSync(path.join(__dirname, '../index.js'), 'utf8');
   assert.match(src, /'\.kickall'/);
+  assert.match(src, /'\.kickall'/);
   assert.match(src, /'\.promote'/);
   assert.match(src, /'\.reset'/);
   assert.match(src, /'\.savecon'/);

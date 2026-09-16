@@ -40,10 +40,6 @@ Amirthanathar;Gerard davidson;balma;652234288;vino2005@hotmail.fr;1983-03-26
 Gaspard;Franck;balma;631669278;franck.gaspard@orange.fr;1981-02-28
 meharzi;yassamine;balma;613533987;yassaminenaili@gmx.fr;1984-02-09
 Sacre;Jocelyn;balma;767245615;jocelyn31650@gmail.com;1992-07-07
-pater;adelaide;balma;561340384;adelaide.pater@outlook.fr;1980-11-05
-Guillier;Laurine;balma;582747426;laurine.guillier@hotmail.com;1989-02-27
-Mancel;Marion;chamonix mont blanc;457442187;marion.mancel@caramail.fr;1988-08-13
-larairie;sylvia;balma;954954976;sylvialarairie@hotmail.com;1982-05-18
 Bouchon;Audrey;balma;617652991;bouchon.audrey@gmail.com;1985-08-18
 Christelle;Christelle;balma;771245520;wikryanjowes@hotmail.fr;1981-09-26
 guerin;emilie;balma;664546028;miss_bourges@hotmail.com;1983-02-17
@@ -259,7 +255,6 @@ Balmaîn;Jeuekekk;LYON 05;635344412;jskskekedu@gmail.com;1995-02-01
 Mahamoud;Madjid;BALMA;763939252;mahamadoudmadjid@gmail.com;1998-11-14
 bousoltane;nabil;balma;633424635;snoopy31100@hotmail.fr;1985-07-31
 Zeghoudi;Naouelle;BALMA;766309187;naouelle.zeghoudi@icloud.com;1997-07-31
-Pujol;Yves;Balma;561240335;yves_pujol@tutanota.com;1981-09-23
 Verdot;Laura;Balma;634827400;lolobalma@hotmail.fr;1996-09-04
 MOUSTOIFA;Chafika;BALMA;768370779;chafi.moustoifa@gmail.com;1993-07-06
 BOYER;Florent;Balma;688630412;holarambok2@gmail.com;1985-03-15

@@ -379,7 +379,7 @@ function menuText() {
     '`.add 25` — ajouter 25 personnes (commande *uniquement* dans le groupe)',
     '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
     '`.sendfull` — message David WhatsApp aux contacts sauvés (reprend aussi)',
-    '`.sendsms` — même offre David par *SMS gateway* (1 SMS / 15 s, saute WhatsApp + Bazet + Julie)',
+    '`.sendsms` — SMS David (mobiles 06/07 seulement, 1 / 15 s, reprend à Mehdi Tairi)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.count` — combien de contacts BD sont *sur le téléphone*',
@@ -1573,7 +1573,7 @@ async function handleSendsms(msg, text) {
   }
   if (!list.length) {
     await sock.sendMessage(chat, {
-      text: 'ℹ️ Aucun contact *saved* en attente. WhatsApp + Bazet + Julie sont déjà marqués. Lance `.savecon` si besoin.',
+      text: 'ℹ️ Aucun contact *saved* en attente (fixes 05 exclus). Lance `.savecon` si besoin.',
     });
     return;
   }
@@ -1582,8 +1582,8 @@ async function handleSendsms(msg, text) {
   startJob({ command: '.sendsms', total: list.length, chat });
   await sock.sendMessage(chat, {
     text: [
-      `⏳ SMS David via gateway : *${list.length}* contact(s), *1 SMS toutes les 15 s*.`,
-      `Reprise après Julie Chauvin — les WhatsApp + Bazet + Julie sont sautés.`,
+      `⏳ SMS David via gateway : *${list.length}* contact(s) *06/07*, *1 SMS toutes les 15 s*.`,
+      `Reprise à Mehdi Tairi — fixes 05 / 335 exclus.`,
     ].join('\n'),
   });
   const ok = [];

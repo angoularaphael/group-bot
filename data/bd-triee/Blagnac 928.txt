@@ -55,16 +55,10 @@ Hammami;Monia;blagnac;685040432;mhamma@outlook.fr;1986-03-13
 Bouatam;Hanane;blagnac;674049917;h.touzi@hotmail.fr;1981-01-21
 Raouya;Ben tahar;blagnac;761188631;drira.raouia25@gmail.com;1986-03-25
 Mekki daouadji;Abdelkader;blagnac;766007573;mekki.4510@gmail.com;1989-02-17
-MAILLARD;Manon;blagnac;532597386;maillard.manou@laposte.net;1989-04-18
 Rabier;Pascal;blagnac;768460516;pascal.rabier3@orange.fr;1983-04-07
-Sciannella;Rosella;blagnac;542543599;rosella.sciannella71@gmail.com;1986-03-12
-Cayla;Adeline;blagnac;534274101;adeline.cayla@hotmail.com;1990-04-27
-Sicre;Bérengère;blagnac;532979846;berengere.sicre@outlook.fr;1989-03-27
-FATMI;Kheira;blagnac;567112341;fatmikh@laposte.net;1983-03-10
 pontois;olivia;blagnac;616908413;oliviapontois@yahoo.com;1993-07-08
 Jacques;Sebastien;blagnac;787750114;seb47180@gmail.com;1997-05-03
 Lopes;Fanny;blagnac;658540541;fanny.carpediem@gmail.com;1985-01-15
-chalé;marie;blagnac;561714454;marie.chale@outlook.fr;1980-07-20
 Zennoun;Lauren;blagnac;620533637;lauren.zennoun@gmail.com;1996-08-21
 sllam;sabah;blagnac;767176450;sabahili2511@gmail.com;1995-11-25
 Esteves;Jonathan;blagnac;678474143;jonathan.esteves7144@gmail.com;1985-12-24
@@ -75,11 +69,9 @@ Navarrete;Camille;blagnac;634901949;camille.navarrete@live.fr;1991-11-13
 Bondet de La Bernardie;Manon;blagnac;767329202;bdlbmanon@gmail.com;1990-08-22
 Dal pont;Julia;blagnac;619255953;jdalpont@yahoo.com;1986-01-04
 ababou;kamel;blagnac;602636058;kamel.ababou@icloud.com;1987-05-29
-Souza;Romilda;blagnac;591917923;romildasouza288@gmail.com;1987-07-15
 Fontaine;Anne Marie;blagnac;663053678;amfontainefr@yahoo.fr;1981-05-30
 navarro;cyrille;blagnac;626461943;navarro.cyrille@hotmail.com;1989-09-21
 Estill;Mary;blagnac;619667109;maryestillpro@hotmail.com;1993-06-06
-St-Jean;Barry;blagnac;547667949;mibog4@laposte.net;1986-04-07
 Barrière;Jessica;blagnac;689651873;jessicabarriere357@gmail.com;1986-01-04
 Abakar;Hassan;blagnac;753283488;karimaglaila@gmail.com;1997-03-22
 Laffont;Laurence;blagnac;632775735;laurencelaffont27021989@gmail.com;1989-02-27
@@ -104,7 +96,6 @@ fournier;jessica;blagnac;629503090;jessica.fournier@live.fr;1981-01-29
 Ranaivozanany;Yael;Blagnac;641260518;yaelrane@yahoo.fr;1996-03-26
 Fradet;Natacha;blagnac;613885759;natasha.fradet12@gmail.com;1984-06-21
 Kéomanivong;Martine;blagnac;642916374;mdj95218@outlook.fr;1981-04-28
-THÉVENY;Céline;blagnac;561451762;moomoo_5431@hotmail.com;1981-08-31
 Thebti;Lilia;blagnac;780560069;liliafaidi3@gmail.com;1983-01-26
 Fontes;Priscillia;blagnac;666260877;fontes.priscillia@orange.fr;1988-12-02
 El qlech;Loubna;blagnac;763559526;roya08@hotmail.it;1982-01-04
@@ -346,7 +337,6 @@ Zimine;Coralie;BLAGNAC;641341187;coraliezimine@hotmail.fr;1998-03-24
 Chobeaux;Cyrille;BLAGNAC;665192050;chobeaux.cyrille@bbox.fr;1992-04-25
 cherih;bilal;blagnac;765878472;cherihh.bilal@gmail.com;1994-06-25
 Ait Aziz;Laila;Blagnac;652036039;lailazoheri@gmail.com;1985-03-23
-Hammami;monia;31700 - BLAGNAC;336858404;mhamma@outlook.fr;1986-03-13
 Sauces;Perrine;Blagnac;603670121;perrinesauces@yahoo.fr;1981-12-22
 laforgue;julien;blagnac;624283843;julien31700@hotmail.fr;1987-03-13
 Heptig;Rose;BLAGNAC;682308759;roseheptig@icloud.com;1984-11-15
@@ -397,7 +387,6 @@ Mohtaram;Mehdi;BLAGNAC;677453565;mehdi.mohtaram01@outlook.fr;1998-08-27
 Pouget;Sandra;BLAGNAC;780554109;pougetsandra@gmail.com;1990-08-15
 tixier;caroline;blagnac;651251575;karolauria@hotmail.fr;1981-06-30
 Elizabeth;Marjorie;BLAGNAC;623056445;madysukali@jotmail.fr;1985-07-10
-Nait;Meriem;BLAGNAC;352863946;mimisnait@gmail.com;1996-06-04
 Cottin;Benjamin;BLAGNAC;681494245;benjamincottin@hotmail.com;1982-12-03
 Autebon;Jennifer;BLAGNAC;667578006;calenzana2b31@hotmail.fr;1986-02-17
 Casse;Christophe;BLAGNAC;630756117;christophecasse@yahoo.fr;1980-02-07

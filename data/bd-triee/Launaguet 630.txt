@@ -37,7 +37,6 @@ Ngadikakou;Stephane;toulouse;698100130;performents@hotmail.fr;1981-01-25
 magela;mouhamed;toulouse;760225823;magelansoula@gmail.com;1997-05-25
 BATTAGLIA;Guillaume;toulouse;789776626;kakashi-sensei-81@hotmail.fr;1994-07-27
 Longatte;Jérémy;launaguet;776699551;jlongatte81@gmail.com;1997-06-30
-Martino;Christelle;launaguet;532977772;christelle.martino@hotmail.com;1985-01-29
 Delcourt;Mickael;launaguet;762947060;micka31140@hotmail.fr;1987-07-07
 Guichaoua;Christelle;launaguet;668111362;christelle.guichaoua@laposte.net;1981-09-20
 ROUYRE;Justine;launaguet;618215654;justine.rouyre@gmail.com;1988-04-23
@@ -80,7 +79,6 @@ Casile;Kevin;launaguet;627941421;kacksonfr@gmail.com;1993-05-09
 Adinani;Ichamdine;launaguet;783323247;ichamdine.adinani@gmail.com;1997-07-28
 Renard;Luigi;launaguet;769401167;mx31200@gmail.com;1985-08-13
 Marseille;Jonathan;launaguet;606704990;marseille.jonathan@laposte.net;1986-01-22
-Metier;Tiffany;toulouse;973133369;tiffany.metier@outlook.fr;1985-03-19
 Galant;Laura;launaguet;686670246;leloup.laura@hotmail.fr;1988-07-15
 Soula;Sabrina;launaguet;761891510;sab.vallee@gmail.com;1995-07-24
 Fidelin;Logan;launaguet;634334096;logan-76@hotmail.fr;1989-11-15

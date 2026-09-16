@@ -3,7 +3,6 @@ Rivière;Alexandre;castelginest;648011518;a.riviere369@laposte.net;1988-11-26
 Ayadi;Hanane;castelginest;646487552;hanane.ayadi@laposte.net;1987-03-11
 Viramodely;Amanda;castelginest;782772193;viramodelyamanda@gmail.com;1994-01-28
 Cervero;Cecile;castelginest;667658813;cecile.cervero@outlook.fr;1988-11-22
-FORGEOT;Sophie;castelginest;975415831;soforrot@laposte.net;1985-09-19
 lellis;jennifer;castelginest;698445913;jennifer51.lellis@gmail.com;1987-06-15
 COUDERT;AGNED;castelginest;660801298;coudertagnes@gmail.com;1982-07-08
 Riera;Celine;castelginest;689666034;celine.segonzac@hotmail.fr;1980-10-16
@@ -29,9 +28,6 @@ Marre;Pauline;castelginest;628293606;pauline.marre@hotmail.fr;1995-01-26
 Chastang;Chrystina;castelginest;622337616;tinadespo@hotmail.fr;1995-09-04
 Bentata;Jihane;castelginest;768370828;boukanbouch@yahoo.com;1987-09-18
 martin;Vincent;castelginest;669453077;vincent200280@gmail.com;1980-02-20
-richard;eloise;castelginest;531216725;eloisee.richard@outlook.fr;1990-05-06
-Bertil;Frédéric;castelginest;975803517;frederic.beertil@laposte.net;1980-02-01
-ORTIZ;Martine;castelginest;531475583;ortiz.martine@hotmail.com;1987-05-16
 Gelé;Aurélie;castelginest;781336928;matelie31@hotmail.fr;1987-07-17
 Carrosse;Anaïs;castelginest;667716108;anaiscarrosse@hotmail.fr;1993-09-09
 bena;antoinette;castelginest;695276877;glanou972@hotmail.com;1982-07-06

@@ -105,9 +105,7 @@ dragon;denis;paris;614940815;denisdragon120@gmail.com;1990-06-09
 Gagné;Antoine;verdun sur garonne;612137552;antoineaf@gmail.com;1984-11-19
 Stocker;Gwenael;gagnac sur garonne;601067144;gwenstock@hotmail.fr;1986-09-16
 Saint jean;Marianne;verdun sur garonne;636629990;marianne.saint-jean@laposte.net;1992-08-09
-berger;delphine;toulouse;534434060;delphine.berger1@outlook.fr;1980-04-10
 Racaud;Celine;portet sur garonne;681689112;celinroom2000@yahoo.fr;1981-12-07
-mettay;nelly;roquefort sur garonne;561976466;nelly.mettay@outlook.fr;1980-11-02
 estaves;Laurie;verdun sur garonne;613191570;estaves.laurie@hotmail.fr;1984-01-07
 Margand;Thomas;verdun sur garonne;760068907;pti-thoma@hotmail.fr;1990-02-21
 Begaud;Sébastien;verdun sur garonne;750020192;seb.begaud@gmail.com;1983-08-15
@@ -135,8 +133,6 @@ Furina;Marine;serignac sur garonne;648521284;marine.bolorinos47@gmail.com;1992-0
 lopez;aurore;portet sur garonne;641008584;aurore.lopez11@gmail.com;1987-07-02
 michel;Carole;st louis de montferrand;623132895;michelcarole3@gmail.com;1988-01-21
 Peyroux;Laurent;andrein;644144669;laurentpeyroux4@gmail.com;1995-06-17
-Gaffe;Sophie;portet sur garonne;962545235;gaffesophie6@gmail.com;1983-06-05
-forment;martine;lestelle de st martory;561905215;forment.martine@outlook.fr;1986-05-05
 Rodrigues;Alexandre;caumont sur garonne;650629616;a.rodrigues31600@gmail.com;1989-04-09
 vallan;nadège;gagnac sur garonne;621203505;ngc2801@yahoo.fr;1981-11-21
 zakouri;soukaina;villenave d ornon;767200025;soukaina.kahrabi@gmail.com;1996-10-25
@@ -191,10 +187,8 @@ dereuder;marc;gensac sur garonne;651182214;marc31.dereudre@gmail.com;1985-06-24
 MICKA L;VERAST;Langon;619307341;mickaelverast33210@hotmail.fr;1994-06-08
 LUCAS;ERWAN;PortetsurGaronne;770528144;scoubidou44140@gmail.com;1992-12-21
 CHAGNA;VINCENT;CouthuressurGaronne;677289853;chagnavincent@gmail.com;1981-08-17
-pailla;amandine;toulouse;561454253;pailla.amandine@outlook.fr;1986-07-18
 Silvain;David;st dizier;780536527;goulin.laure5@gmail.com;1982-01-12
 Miranda;Emmanuel;portet sur garonne;649611694;mirandaemmanuel31120@gmail.com;1987-06-22
-AURIOL;Emilie;portet sur garonne;531227084;auriol.emily@laposte.net;1985-02-16
 Narejos Cucuphat;Aurore;villenave d ornon;670128023;aurore.manon@orange.fr;1987-12-28
 montaut;loic;verdun sur garonne;643876306;montaut.loic@gmail.com;1987-01-21
 beaugrand;ivan;villenave d ornon;686342472;ivanbgd18@gmail.com;1993-04-27
@@ -756,7 +750,6 @@ herter;marie julie;serignac sur garonne;677789398;mjherter@hotmail.com;1985-08-1
 cazenave;thomas;floirac;667656879;cazenave.thomas19@gmail.com;1993-01-28
 LEFEBVRE;Audrey;Saint Julien sur Garonne;686864294;valentin.audrey@hotmail.fr;1985-04-22
 Dany;Pollart;Bully Les Mines;695788560;dany.pollart0111@gmail.com;1983-11-01
-Pontet;Christiane;Meilhan-sur-Garonne;553943366;christiane_pontet@outlook.fr;1982-10-16
 Marques;Camille;LESTIAC SUR GARONNE;762169319;nuagesoleil286@gmail.com;1992-03-26
 Viera;Judicaelle;VERDUN SUR GARONNE;781906054;judicaelle.viera@gmail.com;1991-06-24
 Neang;Linda;PORTET SUR GARONNE;604164783;lindaneang@hotmail.fr;1996-05-15
