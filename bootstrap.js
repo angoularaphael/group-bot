@@ -45,6 +45,8 @@ const ENV_KEYS = [
   'PROGRESS_EVERY_MS',
   'SMS_GATEWAY_URL',
   'SMS_GATEWAY_SECRET',
+  'SMS_GATEWAY_EMAIL',
+  'SMS_GATEWAY_PASSWORD',
 ];
 
 function loadRootEnv() {
