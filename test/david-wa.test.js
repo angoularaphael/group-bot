@@ -10,7 +10,8 @@ test('prénom : Salut Marie, comme le mail David', () => {
   assert.match(text, /^Salut Marie,/);
   assert.match(text, /C’est David du Boxing Center/);
   assert.match(text, /t’offre ta séance d’essai/);
-  assert.match(text, /entourage|autour de toi/);
+  assert.match(text, /déjà membre|déjà inscrit/);
+  assert.doesNotMatch(text, /entourage|autour de toi|filer à quelqu/);
   assert.match(text, /À bientôt,/);
   assert.match(text, /David/);
   assert.ok(text.includes(SEANCE_OFFERTE_URL));
@@ -33,6 +34,18 @@ test('SMS séance offerte : src=sms', () => {
   assert.match(text, /seance d'essai/);
   assert.ok(text.includes(SEANCE_OFFERTE_SMS_URL));
   assert.match(text, /src=sms/);
+});
+
+test('relance bug déjà inscrit', () => {
+  const { seanceOfferteReviensWhatsAppText, seanceOfferteReviensSmsText } = require('../lib/david-wa');
+  const wa = seanceOfferteReviensWhatsAppText({ prenom: 'martin', telephone: '336768886807' });
+  assert.match(wa, /^Salut Martin,/);
+  assert.match(wa, /bug/);
+  assert.match(wa, /déjà inscrit/);
+  assert.doesNotMatch(wa, /entourage|filer à quelqu/);
+  const sms = seanceOfferteReviensSmsText({ prenom: 'martin' });
+  assert.match(sms, /bug/);
+  assert.match(sms, /src=sms/);
 });
 
 test('deux numéros → textes un peu différents (anti-copie identique)', () => {

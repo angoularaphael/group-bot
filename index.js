@@ -30,7 +30,7 @@ const {
 } = require('./lib/phones');
 const { isTestAddMode, modeLabel, setAddMode } = require('./lib/mode');
 const { markPhone, unmarkPhone, clearPhoneMarkers, loadUsed, rememberGroup, stats: usedStats, applySeedSaved } = require('./lib/used');
-const { pickUnused, pickUnsaved, pickSavedUnsent, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir, loadProdContacts } = require('./lib/contacts');
+const { pickUnused, pickUnsaved, pickSavedUnsent, pickWaSentForReviens, poolStats, displayName, reloadProdCache, testContacts, labeledTestContacts, displayFrPhone, testNumbersLabel, allContactsForAdd, bdDir, loadProdContacts } = require('./lib/contacts');
 const { dataDir, dataFile } = require('./lib/paths');
 const { isCommandAuthorized, authorizedPhonesList } = require('./lib/auth');
 const {
@@ -46,7 +46,7 @@ const {
   shouldTryNextJid,
   shouldInviteAfterFail,
 } = require('./lib/add-status');
-const { seanceOfferteWhatsAppText, seanceOfferteSmsText, waFirstName, waContactName } = require('./lib/david-wa');
+const { seanceOfferteWhatsAppText, seanceOfferteSmsText, seanceOfferteReviensWhatsAppText, seanceOfferteReviensSmsText, waFirstName, waContactName } = require('./lib/david-wa');
 const { sendSeanceSms } = require('./lib/sms-out');
 const {
   startJob,
@@ -92,7 +92,7 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 const BOT_COMMANDS = new Set([
   '.menu', '.aide', '.help', '.ping', '.stats',
   '.cgroup', '.pp', '.gpp', '.mname', '.add',
-  '.savecon', '.sendtest', '.sendfull', '.sendsms', '.log', '.count',
+  '.savecon', '.sendtest', '.sendfull', '.sendsms', '.sendreviens', '.log', '.count',
   '.mute', '.unmute',
   '.kickall', '.promote', '.reset',
 ]);
@@ -380,6 +380,7 @@ function menuText() {
     '`.savecon` — enregistrer *3000* contacts (reprend où ça s’est arrêté)',
     '`.sendfull` — message David WhatsApp aux contacts sauvés (reprend aussi)',
     '`.sendsms` — SMS David (mobiles 06/07 seulement, 1 / 15 s, reprend après Yasser Benama)',
+    '`.sendreviens` — relance bug « déjà inscrit » (WhatsApp ou SMS selon le 1er envoi)',
     '`.sendtest` — message David aux 5 numéros test',
     '`.log` — dernier contact + logs si WhatsApp s’est coupé',
     '`.count` — combien de contacts BD sont *sur le téléphone*',
@@ -1635,6 +1636,81 @@ async function handleSendsms(msg, text) {
   });
 }
 
+async function handleSendreviens(msg, text) {
+  const chat = msg.key.remoteJid;
+  if (bulkRunning) {
+    await sock.sendMessage(chat, { text: '⏳ Un envoi / enregistrement est déjà en cours. Attends la fin.' });
+    return;
+  }
+  const want = parseJobCount(text, 'sendreviens', SAVE_BATCH);
+  let list;
+  try {
+    list = pickWaSentForReviens(want);
+  } catch (e) {
+    await sock.sendMessage(chat, { text: '❌ Relance impossible : ' + e.message });
+    return;
+  }
+  if (!list.length) {
+    await sock.sendMessage(chat, {
+      text: 'ℹ️ Personne à relancer — aucun contact *wa_sent* en attente de `.sendreviens`.',
+    });
+    return;
+  }
+  bulkRunning = true;
+  const started = Date.now();
+  startJob({ command: '.sendreviens', total: list.length, chat });
+  await sock.sendMessage(chat, {
+    text: `⏳ Relance bug « déjà inscrit » : *${list.length}* contact(s), WhatsApp ou SMS selon le 1er envoi.`,
+  });
+  const ok = [];
+  const fail = [];
+  const ping = createProgressPing(chat);
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      touchCurrent(c, i + 1);
+      try {
+        if (c.via === 'sms') {
+          const result = await sendSeanceSms(c.telephone, seanceOfferteReviensSmsText(c), {
+            prenom: c.prenom,
+            nom: c.nom,
+          });
+          if (!result.sent) throw new Error(result.reason || 'sms_refuse');
+        } else {
+          if (!(await ensureWhatsAppOrPause(c, 45000))) break;
+          await sock.sendMessage(c.jid, { text: seanceOfferteReviensWhatsAppText(c) }, { linkPreview: false });
+        }
+        markPhone(c.telephone, { reviens_sent: true, via: c.via || 'whatsapp' });
+        markOk(c);
+        ok.push(c);
+      } catch (e) {
+        console.warn(`[BOT] .sendreviens ${c.telephone}:`, e.message);
+        markFail(c, e.message);
+        fail.push({ ...c, error: e.message });
+      }
+      await ping(
+        `🔁 ${ok.length} relances / ${fail.length} échecs — ${i + 1}/${list.length}\nEn cours : ${contactLabel(c)}`,
+        i === list.length - 1
+      );
+      if (i < list.length - 1) {
+        await sleep(c.via === 'sms' ? SMS_DELAY_MS : ADD_DELAY_MS);
+      }
+    }
+  } finally {
+    bulkRunning = false;
+  }
+  finishJob();
+  const mins = Math.max(1, Math.round((Date.now() - started) / 60000));
+  await sendSafe(chat, {
+    text: [
+      ok.length
+        ? `✅ *${ok.length}/${list.length}* relances envoyées (${mins} min)`
+        : `❌ *0/${list.length}* relance envoyée`,
+      fail.length ? `❌ ${fail.length} échec(s).` : '',
+    ].filter(Boolean).join('\n'),
+  });
+}
+
 async function handleSendtest(msg) {
   const chat = msg.key.remoteJid;
   const list = labeledTestContacts();
@@ -1890,6 +1966,11 @@ async function handleIncomingMessages(m) {
 
       if (cmd === '.sendsms') {
         await handleSendsms(msg, clean);
+        continue;
+      }
+
+      if (cmd === '.sendreviens') {
+        await handleSendreviens(msg, clean);
         continue;
       }
 
@@ -2172,6 +2253,42 @@ app.post('/api/logout', async (_req, res) => {
   clearAuthSession();
   offerNewQr('Session coupée — scanne le nouveau QR pour continuer.');
   res.json({ success: true, message: 'QR relancé' });
+});
+
+function verifyBotApi(req, res) {
+  const secret = String(process.env.SITE_API_SECRET || process.env.BOT_API_SECRET || process.env.SMS_GATEWAY_SECRET || '').trim();
+  const got = String(req.headers['x-api-secret'] || req.headers['x-sync-secret'] || '').trim();
+  if (!secret || got !== secret) {
+    res.status(401).json({ error: 'unauthorized' });
+    return false;
+  }
+  return true;
+}
+
+app.post('/api/git-sync', (req, res) => {
+  if (!verifyBotApi(req, res)) return;
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('git pull origin main', {
+      cwd: __dirname,
+      encoding: 'utf8',
+      timeout: 60000,
+    });
+    const restart = Boolean((req.body || {}).restart);
+    res.json({ success: true, out: String(out).slice(0, 2000), restart });
+    if (restart) setTimeout(() => process.exit(0), 800);
+  } catch (err) {
+    res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/campaign/seance-offerte-reviens', (req, res) => {
+  if (!verifyBotApi(req, res)) return;
+  if (!isConnected) return res.status(409).json({ error: 'whatsapp_disconnected' });
+  if (bulkRunning) return res.json({ success: true, alreadyRunning: true });
+  const fakeMsg = { key: { remoteJid: `${MANDATORY_ADMIN_PHONE}@s.whatsapp.net` } };
+  handleSendreviens(fakeMsg, '.sendreviens').catch((e) => console.error('[BOT] reviens api:', e));
+  res.json({ success: true, accepted: true });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
